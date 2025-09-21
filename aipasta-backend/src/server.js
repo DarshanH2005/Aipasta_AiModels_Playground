@@ -22,6 +22,9 @@ const { authenticateToken, optionalAuth } = require('./middleware/auth');
 // Create Express app
 const app = express();
 
+// Trust proxy for Render deployment
+app.set('trust proxy', true);
+
 // Security middleware
 app.use(helmet({
   contentSecurityPolicy: {
@@ -43,7 +46,7 @@ app.use(helmet({
 // CORS configuration
 const corsOptions = {
   origin: process.env.NODE_ENV === 'production' 
-    ? process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000']
+    ? [process.env.FRONTEND_URL, 'http://localhost:3000'] || ['http://localhost:3000']
     : ['http://localhost:3000', 'http://localhost:3001'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
