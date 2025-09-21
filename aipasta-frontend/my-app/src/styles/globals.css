@@ -1,0 +1,174 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Apply custom scrollbar globally to common scrollable elements */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(156 163 175) transparent;
+}
+
+*::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: rgba(156, 163, 175, 0.1);
+  border-radius: 4px;
+  margin: 2px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, rgb(156 163 175), rgb(107 114 128));
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background-clip: content-box;
+  transition: all 0.2s ease;
+  min-height: 20px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, rgb(107 114 128), rgb(75 85 99));
+  background-clip: content-box;
+  transform: scale(1.05);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Custom stylish scrollbar */
+.scrollbar-custom,
+.chat-window,
+.overflow-auto,
+.overflow-y-auto,
+.overflow-x-auto {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(156 163 175) transparent;
+}
+
+.scrollbar-custom::-webkit-scrollbar,
+.chat-window::-webkit-scrollbar,
+.overflow-auto::-webkit-scrollbar,
+.overflow-y-auto::-webkit-scrollbar,
+.overflow-x-auto::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+.scrollbar-custom::-webkit-scrollbar-track,
+.chat-window::-webkit-scrollbar-track,
+.overflow-auto::-webkit-scrollbar-track,
+.overflow-y-auto::-webkit-scrollbar-track,
+.overflow-x-auto::-webkit-scrollbar-track {
+  background: rgba(156, 163, 175, 0.1);
+  border-radius: 4px;
+  margin: 2px;
+}
+
+.scrollbar-custom::-webkit-scrollbar-thumb,
+.chat-window::-webkit-scrollbar-thumb,
+.overflow-auto::-webkit-scrollbar-thumb,
+.overflow-y-auto::-webkit-scrollbar-thumb,
+.overflow-x-auto::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, rgb(156 163 175), rgb(107 114 128));
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background-clip: content-box;
+  transition: all 0.2s ease;
+  min-height: 20px;
+}
+
+.scrollbar-custom::-webkit-scrollbar-thumb:hover,
+.chat-window::-webkit-scrollbar-thumb:hover,
+.overflow-auto::-webkit-scrollbar-thumb:hover,
+.overflow-y-auto::-webkit-scrollbar-thumb:hover,
+.overflow-x-auto::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, rgb(107 114 128), rgb(75 85 99));
+  background-clip: content-box;
+  transform: scale(1.1);
+}
+
+.scrollbar-custom::-webkit-scrollbar-corner,
+.chat-window::-webkit-scrollbar-corner,
+.overflow-auto::-webkit-scrollbar-corner,
+.overflow-y-auto::-webkit-scrollbar-corner,
+.overflow-x-auto::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Dark mode scrollbar */
+@media (prefers-color-scheme: dark) {
+  * {
+    scrollbar-color: rgb(75 85 99) transparent;
+  }
+  
+  *::-webkit-scrollbar-track {
+    background: rgba(75, 85, 99, 0.1);
+  }
+  
+  *::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, rgb(75 85 99), rgb(55 65 81));
+    background-clip: content-box;
+  }
+  
+  *::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, rgb(107 114 128), rgb(156 163 175));
+    background-clip: content-box;
+  }
+
+  .scrollbar-custom,
+  .chat-window,
+  .overflow-auto,
+  .overflow-y-auto,
+  .overflow-x-auto {
+    scrollbar-color: rgb(75 85 99) transparent;
+  }
+  
+  .scrollbar-custom::-webkit-scrollbar-track,
+  .chat-window::-webkit-scrollbar-track,
+  .overflow-auto::-webkit-scrollbar-track,
+  .overflow-y-auto::-webkit-scrollbar-track,
+  .overflow-x-auto::-webkit-scrollbar-track {
+    background: rgba(75, 85, 99, 0.1);
+  }
+  
+  .scrollbar-custom::-webkit-scrollbar-thumb,
+  .chat-window::-webkit-scrollbar-thumb,
+  .overflow-auto::-webkit-scrollbar-thumb,
+  .overflow-y-auto::-webkit-scrollbar-thumb,
+  .overflow-x-auto::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, rgb(75 85 99), rgb(55 65 81));
+    background-clip: content-box;
+  }
+  
+  .scrollbar-custom::-webkit-scrollbar-thumb:hover,
+  .chat-window::-webkit-scrollbar-thumb:hover,
+  .overflow-auto::-webkit-scrollbar-thumb:hover,
+  .overflow-y-auto::-webkit-scrollbar-thumb:hover,
+  .overflow-x-auto::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, rgb(107 114 128), rgb(156 163 175));
+    background-clip: content-box;
+  }
+}

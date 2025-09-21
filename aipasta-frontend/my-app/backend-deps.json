@@ -1,0 +1,12 @@
+{
+  "name": "ai-pasta-backend-setup",
+  "version": "1.0.0",
+  "description": "Backend setup script for AI Pasta",
+  "scripts": {
+    "install-backend-deps": "npm install mongodb node-fetch"
+  },
+  "dependencies": {
+    "mongodb": "^6.0.0",
+    "node-fetch": "^2.6.7"
+  }
+}
