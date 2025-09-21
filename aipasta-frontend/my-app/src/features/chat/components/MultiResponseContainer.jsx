@@ -1,8 +1,8 @@
 import React, { memo, useState, useMemo, useCallback } from 'react';
 import { IconLayoutCards, IconLayoutList, IconLayoutColumns, IconLoader, IconAlertTriangle } from '@tabler/icons-react';
-import StreamingResponseCard from './streaming-response-card';
-import TabbedResponseLayout from './tabbed-response-layout';
-import ColumnResponseLayout from './column-response-layout';
+import StreamingResponseCard from './StreamingResponseCard';
+import TabbedResponseLayout from './TabbedResponseLayout';
+import ColumnResponseLayout from './ColumnResponseLayout';
 
 const OptimizedMultiResponseContainer = memo(({ 
   responses = [], 

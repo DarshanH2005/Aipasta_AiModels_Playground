@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { IconUser, IconRobot, IconCopy, IconCheck, IconExternalLink, IconLoader } from '@tabler/icons-react';
-import MarkdownRenderer from './markdown-renderer';
-import ColumnResponseLayout from './column-response-layout';
-import { formatCurrency } from '../../lib/wallet';
+import MarkdownRenderer from '../../../shared/components/MarkdownRenderer';
+import ColumnResponseLayout from './ColumnResponseLayout';
+import { formatCurrency } from '../../../lib/wallet';
 
 const ConversationLayout = ({ conversationTurns, isLoading, onRetry }) => {
   const [copiedStates, setCopiedStates] = useState({});

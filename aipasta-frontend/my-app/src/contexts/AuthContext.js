@@ -59,6 +59,12 @@ export const AuthProvider = ({ children }) => {
   const data = await safeParseResponse(response);
 
       if (!response.ok) {
+        // Handle specific error cases
+        if (response.status === 429) {
+          console.error('Login rate limited:', data.message || 'Too many requests');
+          return { success: false, error: 'Server is temporarily busy. Please try again in a few minutes.' };
+        }
+        
         // Don't throw error, just return error response
         console.error('Login failed:', data.message || 'Login failed');
         return { success: false, error: data.message || 'Login failed' };
@@ -73,6 +79,14 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       await logAuthError('login', error, { email });
       console.error('Login error:', error);
+      
+      // Handle specific network errors
+      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        return { success: false, error: 'Unable to connect to server. Please check your connection and try again.' };
+      } else if (error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
+        return { success: false, error: 'Network error. Please check your internet connection.' };
+      }
+      
       return { success: false, error: error.message || 'Network error occurred' };
     }
   };
@@ -110,6 +124,12 @@ export const AuthProvider = ({ children }) => {
   const data = await safeParseResponse(response);
 
       if (!response.ok) {
+        // Handle specific error cases
+        if (response.status === 429) {
+          console.error('Registration rate limited:', data.message || 'Too many requests');
+          return { success: false, error: 'Server is temporarily busy. Please try again in a few minutes.' };
+        }
+        
         // Don't throw error, just return error response
         console.error('Registration failed:', data.message || 'Registration failed');
         return { success: false, error: data.message || 'Registration failed' };
@@ -123,6 +143,14 @@ export const AuthProvider = ({ children }) => {
       return { success: true, user: data.data.user };
     } catch (error) {
       console.error('Registration error:', error);
+      
+      // Handle specific network errors
+      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        return { success: false, error: 'Unable to connect to server. Please check your connection and try again.' };
+      } else if (error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
+        return { success: false, error: 'Network error. Please check your internet connection.' };
+      }
+      
       return { success: false, error: error.message || 'Network error occurred' };
     }
   };

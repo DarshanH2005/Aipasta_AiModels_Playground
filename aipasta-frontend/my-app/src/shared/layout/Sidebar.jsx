@@ -83,11 +83,13 @@ export const DesktopSidebar = ({
     <>
       <motion.div
         className={cn(
-          "h-full px-3 py-4 hidden md:flex md:flex-col bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 w-[250px] shrink-0 overflow-hidden rounded-lg shadow-sm",
+          "h-full py-4 hidden md:flex md:flex-col bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 w-[250px] shrink-0 rounded-lg shadow-sm",
           className
         )}
         animate={{
           width: animate ? (shouldBeOpen ? "250px" : "60px") : "250px",
+          paddingLeft: animate ? (shouldBeOpen ? "12px" : "8px") : "12px",
+          paddingRight: animate ? (shouldBeOpen ? "12px" : "8px") : "12px",
         }}
         onMouseEnter={() => {
           // When not locked, expand the sidebar on hover

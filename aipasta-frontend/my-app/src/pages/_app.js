@@ -1,7 +1,7 @@
 import "@/styles/globals.css";
 import AuthProvider from '../contexts/AuthContext';
-import { ToastProvider } from '../components/ui/toast-notifications';
-import ErrorBoundary from '../components/ui/ErrorBoundary';
+// import ThemeProvider from '../contexts/ThemeContext';
+import { ToastProvider, ErrorBoundary } from '../shared';
 
 export default function App({ Component, pageProps }) {
   // Dev-only guard: ensure Next dev HMR client can safely read `window.next.router.components`
@@ -64,11 +64,13 @@ export default function App({ Component, pageProps }) {
   }
   return (
     <ErrorBoundary>
-      <AuthProvider>
-        <ToastProvider>
-          <Component {...pageProps} />
-        </ToastProvider>
-      </AuthProvider>
+      {/* <ThemeProvider> */}
+        <AuthProvider>
+          <ToastProvider>
+            <Component {...pageProps} />
+          </ToastProvider>
+        </AuthProvider>
+      {/* </ThemeProvider> */}
     </ErrorBoundary>
   );
 }

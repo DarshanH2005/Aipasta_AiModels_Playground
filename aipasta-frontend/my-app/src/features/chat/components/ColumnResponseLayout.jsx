@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { IconCopy, IconCheck, IconRobot, IconCurrency, IconLoader, IconMaximize, IconMinimize, IconExternalLink, IconX } from '@tabler/icons-react';
-import { formatCurrency } from '../../lib/wallet';
-import MarkdownRenderer from './markdown-renderer';
+import { formatCurrency } from '../../../lib/wallet';
+import MarkdownRenderer from '../../../shared/components/MarkdownRenderer';
 
 const ColumnResponseLayout = ({ responses, timestamp, attachments }) => {
   const [copiedStates, setCopiedStates] = useState({});

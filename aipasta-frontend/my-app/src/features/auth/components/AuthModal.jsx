@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { IconEye, IconEyeOff, IconUser, IconMail, IconLock, IconX } from '@tabler/icons-react';
-import { useAuth } from '../../contexts/AuthContext';
-import { useToast } from '../ui/toast-notifications';
+import { useAuth } from '../../../contexts/AuthContext';
+import { useToast } from '../../../shared';
 
 const AuthModal = ({ isOpen, onClose, initialMode = 'login' }) => {
   const [mode, setMode] = useState(initialMode); // 'login', 'register'
@@ -270,18 +270,35 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }) => {
                   body: JSON.stringify({ idToken })
                 });
 
-                const data = await resp.json();
                 if (!resp.ok) {
-                  toast.error(data.message || 'Google login failed');
+                  if (resp.status === 429) {
+                    toast.error('Server is temporarily busy. Please try again in a few minutes.');
+                    return;
+                  }
+                  
+                  let errorMessage = 'Google login failed';
+                  try {
+                    const data = await resp.json();
+                    errorMessage = data.message || errorMessage;
+                  } catch (jsonErr) {
+                    console.warn('Failed to parse error response:', jsonErr);
+                  }
+                  
+                  toast.error(errorMessage);
                   return;
                 }
 
+                const data = await resp.json();
                 await loginWithToken(data.token, data.data?.user);
                 toast.success('Logged in with Google');
                 onClose();
               } catch (err) {
                 console.error('Google sign-in error:', err);
-                toast.error('Google sign-in failed');
+                if (err.name === 'TypeError' && err.message.includes('fetch')) {
+                  toast.error('Unable to connect to server. Please check your connection and try again.');
+                } else {
+                  toast.error('Google sign-in failed');
+                }
               }
             }
           });

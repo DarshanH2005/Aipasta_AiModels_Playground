@@ -2,157 +2,14 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { useAuth } from '../contexts/AuthContext';
-import AuthModal from '../components/auth/AuthModal';
-import SettingsModal from '../components/ui/settings-modal';
-import PlansModal from '../components/ui/plans-modal';
-import { Sidebar, SidebarBody, SidebarLink, SidebarProvider, SidebarFooter } from '../components/ui/sidebar';
-import { IconBrain, IconRobot, IconSend, IconSettings, IconChevronDown, IconPhoto, IconMusic, IconCurrency, IconEye, IconVideo, IconFile, IconAlertTriangle, IconChevronUp, IconPinned, IconPin, IconTrash, IconLogout } from '@tabler/icons-react';
-import SimpleUploadButton from '../components/ui/simple-upload-button';
-import ModelSelectionModal from '../components/ui/model-selection-modal';
-import OptimizedMultiResponseContainer from '../components/ui/optimized-multi-response-container';
+import { AuthModal, UserCreditsDisplay, MultiResponseContainer, ModelSelectionModal, SimpleUploadButton, PlaceholdersAndVanishInput } from '../features';
+import { ToastProvider, useToast, SettingsModal, PlansModal, Sidebar, SidebarBody, SidebarLink, SidebarProvider, SidebarFooter } from '../shared';
+import ThemeToggle from '../components/ui/working-theme-toggle';
+import { IconBrain, IconRobot, IconSend, IconSettings, IconChevronDown, IconPhoto, IconMusic, IconCurrency, IconEye, IconVideo, IconFile, IconAlertTriangle, IconChevronUp, IconPinned, IconPin, IconTrash, IconLogout, IconMenu2, IconSun, IconMoon } from '@tabler/icons-react';
 import { useStreamingResponses, streamModelResponse } from '../hooks/useStreamingResponses';
 import { getChatSessions, createChatSession, getChatSession, sendChatMessage, deleteChatSession } from '../lib/api-client';
-import { ToastProvider, useToast } from '../components/ui/toast-notifications';
-
-// Mock AI models data with multimodal capabilities and pricing - Extended OpenRouter models
-const AI_MODELS = [
-  { 
-    id: 'gpt-4o', 
-    name: 'GPT-4o', 
-    provider: 'OpenRouter', 
-    description: 'Latest OpenAI multimodal model with vision and audio',
-    pricing: { input: 0.0025, output: 0.01, image: 0.00765 },
-    capabilities: { text: true, image: true, audio: true, video: false },
-    maxTokens: 4096, contextLength: 128000
-  },
-  { 
-    id: 'gpt-4-turbo', 
-    name: 'GPT-4 Turbo', 
-    provider: 'OpenRouter', 
-    description: 'Fast and capable GPT-4 variant with 128k context',
-    pricing: { input: 0.01, output: 0.03 },
-    capabilities: { text: true, image: true, audio: false, video: false },
-    maxTokens: 4096, contextLength: 128000
-  },
-  { 
-    id: 'claude-3.5-sonnet', 
-    name: 'Claude 3.5 Sonnet', 
-    provider: 'OpenRouter', 
-    description: 'Anthropic\'s most intelligent model with vision',
-    pricing: { input: 0.003, output: 0.015, image: 0.0048 },
-    capabilities: { text: true, image: true, audio: false, video: false },
-    maxTokens: 8192, contextLength: 200000
-  },
-  { 
-    id: 'claude-3-haiku', 
-    name: 'Claude 3 Haiku', 
-    provider: 'OpenRouter', 
-    description: 'Fast and affordable Claude model',
-    pricing: { input: 0.00025, output: 0.00125 },
-    capabilities: { text: true, image: false, audio: false, video: false },
-    maxTokens: 4096, contextLength: 200000
-  },
-  { 
-    id: 'llama-3.1-405b', 
-    name: 'Llama 3.1 405B', 
-    provider: 'OpenRouter', 
-    description: 'Meta\'s largest open-source model',
-    pricing: { input: 0.003, output: 0.003 },
-    capabilities: { text: true, image: false, audio: false, video: false },
-    maxTokens: 4096, contextLength: 131072
-  },
-  { 
-    id: 'llama-3.1-70b', 
-    name: 'Llama 3.1 70B', 
-    provider: 'OpenRouter', 
-    description: 'High-performance open-source model',
-    pricing: { input: 0.0004, output: 0.0004 },
-    capabilities: { text: true, image: false, audio: false, video: false },
-    maxTokens: 4096, contextLength: 131072
-  },
-  { 
-    id: 'llama-3.2-90b-vision', 
-    name: 'Llama 3.2 90B Vision', 
-    provider: 'OpenRouter', 
-    description: 'Open-source multimodal model with vision',
-    pricing: { input: 0.0005, output: 0.0005, image: 0.001 },
-    capabilities: { text: true, image: true, audio: false, video: false },
-    maxTokens: 4096, contextLength: 128000
-  },
-  { 
-    id: 'gemini-pro', 
-    name: 'Gemini Pro', 
-    provider: 'OpenRouter', 
-    description: 'Google\'s multimodal AI model',
-    pricing: { input: 0.000125, output: 0.000375, image: 0.0025 },
-    capabilities: { text: true, image: true, audio: false, video: false },
-    maxTokens: 2048, contextLength: 30720
-  },
-  { 
-    id: 'mistral-large', 
-    name: 'Mistral Large', 
-    provider: 'OpenRouter', 
-    description: 'Mistral\'s flagship model with strong performance',
-    pricing: { input: 0.002, output: 0.006 },
-    capabilities: { text: true, image: false, audio: false, video: false },
-    maxTokens: 4096, contextLength: 128000
-  },
-  { 
-    id: 'mixtral-8x7b', 
-    name: 'Mixtral 8x7B', 
-    provider: 'OpenRouter', 
-    description: 'Mixture of experts model with great performance',
-    pricing: { input: 0.00024, output: 0.00024 },
-    capabilities: { text: true, image: false, audio: false, video: false },
-    maxTokens: 4096, contextLength: 32768
-  },
-  { 
-    id: 'codellama-70b', 
-    name: 'CodeLlama 70B', 
-    provider: 'OpenRouter', 
-    description: 'Specialized coding model based on Llama',
-    pricing: { input: 0.0007, output: 0.0007 },
-    capabilities: { text: true, image: false, audio: false, video: false },
-    maxTokens: 4096, contextLength: 4096
-  },
-  { 
-    id: 'whisper-large-v3', 
-    name: 'Whisper Large v3', 
-    provider: 'OpenRouter', 
-    description: 'OpenAI\'s speech-to-text model',
-    pricing: { input: 0.006, output: 0.001, audio: 0.006 },
-    capabilities: { text: true, image: false, audio: true, video: false },
-    maxTokens: 4096, contextLength: 25000
-  },
-  // Free models
-  { 
-    id: 'llama-3.1-8b-free', 
-    name: 'Llama 3.1 8B (Free)', 
-    provider: 'OpenRouter', 
-    description: 'Free tier Llama model',
-    pricing: { input: 0, output: 0 },
-    capabilities: { text: true, image: false, audio: false, video: false },
-    maxTokens: 2048, contextLength: 131072
-  },
-  { 
-    id: 'mixtral-8x7b-free', 
-    name: 'Mixtral 8x7B (Free)', 
-    provider: 'OpenRouter', 
-    description: 'Free tier Mixtral model',
-    pricing: { input: 0, output: 0 },
-    capabilities: { text: true, image: false, audio: false, video: false },
-    maxTokens: 2048, contextLength: 32768
-  },
-  { 
-    id: 'gemma-7b-free', 
-    name: 'Gemma 7B (Free)', 
-    provider: 'OpenRouter', 
-    description: 'Free Google Gemma model',
-    pricing: { input: 0, output: 0 },
-    capabilities: { text: true, image: false, audio: false, video: false },
-    maxTokens: 2048, contextLength: 8192
-  }
-];
+import { AI_MODELS, AI_CHAT_PLACEHOLDERS } from '../constants/models';
+import { calculateTokensNeeded, hasSufficientTokens, getTokenRequirements } from '../utils/tokens';
 
 // Optimized chat message component for streaming responses
 const ChatMessage = ({ message, isUser, streamingResponses, hasActiveResponses }) => {
@@ -165,9 +22,9 @@ const ChatMessage = ({ message, isUser, streamingResponses, hasActiveResponses }
   // Handle streaming AI responses
   if (!isUser && streamingResponses && streamingResponses.length > 0) {
     return (
-      <div className="flex justify-start mb-4">
+      <div className="flex justify-start mb-6 px-4">
         <div className="max-w-[90%] w-full">
-          <OptimizedMultiResponseContainer
+          <MultiResponseContainer
             responses={streamingResponses}
             timestamp={message.timestamp}
             attachments={message.attachments}
@@ -180,30 +37,31 @@ const ChatMessage = ({ message, isUser, streamingResponses, hasActiveResponses }
   }
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
-      <div className={`max-w-[80%] rounded-lg ${
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-6 px-4`}>
+      <div className={`max-w-[80%] rounded-xl shadow-sm border transition-all duration-200 ${
         isUser 
-          ? 'bg-purple-600 text-white' 
-          : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-900 dark:text-neutral-100'
+          ? 'bg-purple-600 text-white border-purple-500 shadow-purple-200 dark:shadow-purple-900/20' 
+          : 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 border-gray-200 dark:border-neutral-700 hover:shadow-md'
       }`}>
         {/* Model label for AI responses */}
         {!isUser && message.model && (
-          <div className="px-3 py-2 border-b border-neutral-200 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 rounded-t-lg">
+          <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-600 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-neutral-700 dark:to-neutral-800 rounded-t-xl">
             <div className="flex items-center justify-between">
-              <div className="font-medium text-sm text-neutral-900 dark:text-neutral-100">
+              <div className="font-medium text-sm text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                 {message.model.name}
               </div>
-              <div className="text-xs text-neutral-500 dark:text-neutral-400">
+              <div className="text-xs text-neutral-500 dark:text-neutral-400 bg-white dark:bg-neutral-800 px-2 py-1 rounded-full">
                 {message.model.provider}
               </div>
             </div>
           </div>
         )}
         
-        <div className="p-3">
+        <div className="p-5">
           {/* Text content */}
           {message.content && (
-            <div className="whitespace-pre-wrap mb-2 last:mb-0">{message.content}</div>
+            <div className="leading-relaxed text-[15px]">{message.content}</div>
           )}
           
           {/* Attachments */}
@@ -324,7 +182,9 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
   // Toast notifications
   const toast = useToast();
   const [models, setModels] = useState([]); // Available models from backend
-  const [modelsLoading, setModelsLoading] = useState(true);
+  const [modelsLoading, setModelsLoading] = useState(false); // Fixed: Start with false, not true
+  const [hasLoadedModels, setHasLoadedModels] = useState(false); // Track if models have been loaded
+  const modelsLoadAttempted = useRef(false); // Track if we've attempted to load models
   const [selectedModels, setSelectedModels] = useState([]); // Array of selected models
   const [chatSessions, setChatSessions] = useState([]); // Chat history from backend
   const [chatSessionsLoading, setChatSessionsLoading] = useState(true);
@@ -509,7 +369,7 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
       const merged = [...filtered, ...toAdd].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
       return merged;
     });
-  }, [allResponses, currentSessionId, clearResponses]);
+  }, [allResponses, clearResponses]);
 
   // Auto-save completed responses when all streaming finishes
   useEffect(() => {
@@ -528,32 +388,13 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
     setIsClient(true);
   }, []);
 
-  // Check authentication and load models when user state changes
-  useEffect(() => {
-    if (isClient && !authLoading && user) {
-      // Only call checkAuthAndLoadModels when user is authenticated
-      checkAuthAndLoadModels();
-    } else if (isClient && !authLoading && !user) {
-      // Clear models and data when user is not authenticated
-      setModels([]);
-      setError(null);
-      console.log('❌ User not authenticated, clearing models');
+  const loadModels = useCallback(async () => {
+    // Prevent multiple loads - only load once
+    if (modelsLoading) {
+      console.log('🔄 Models already loading, skipping...');
+      return;
     }
-  }, [user, isClient, authLoading]);
 
-  const checkAuthAndLoadModels = async () => {
-    console.log('✅ User authenticated, loading models directly from OpenRouter');
-    try {
-      await loadModels();
-      console.log('✅ Models loaded successfully - ready for live chat');
-    } catch (error) {
-      console.error('❌ Error in checkAuthAndLoadModels:', error);
-      toast.error('Failed to initialize: ' + error.message);
-      setError('Failed to initialize: ' + error.message);
-    }
-  };
-
-  const loadModels = async () => {
     try {
       setModelsLoading(true);
       
@@ -562,10 +403,14 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
       
       // Import the fetchModels function from api-client
       const { fetchModels } = await import('../lib/api-client');
+      
+      console.log('🔄 Calling fetchModels...');
       const response = await fetchModels();
+      console.log('✅ fetchModels response:', response);
       
       // Extract models array from the response
       const models = response.models || [];
+      console.log('📦 Extracted models count:', models.length);
       
       setModels(models);
       const loadedCount = models.length;
@@ -622,6 +467,7 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
       
       console.log(`✅ Loaded ${loadedCount} models from backend API`);
       toast.success(`Connected to Backend - ${loadedCount} models loaded`);
+      setHasLoadedModels(true); // Mark models as loaded
     } catch (error) {
       console.error('❌ Error loading models from backend:', error);
       toast.error('Failed to load AI models: ' + error.message);
@@ -629,7 +475,61 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
     } finally {
       setModelsLoading(false);
     }
-  };
+  }, [toast, modelsLoading]);
+
+  const checkAuthAndLoadModels = useCallback(async () => {
+    console.log('✅ User authenticated, loading models directly from OpenRouter');
+    try {
+      await loadModels();
+      console.log('✅ Models loaded successfully - ready for live chat');
+    } catch (error) {
+      console.error('❌ Error in checkAuthAndLoadModels:', error);
+      toast.error('Failed to initialize: ' + error.message);
+      setError('Failed to initialize: ' + error.message);
+    }
+  }, [loadModels, toast]);
+
+  // Check authentication and load models when user state changes
+  useEffect(() => {
+    if (isClient && !authLoading && user && !modelsLoadAttempted.current) {
+      // Only call checkAuthAndLoadModels once when user is authenticated
+      modelsLoadAttempted.current = true;
+      checkAuthAndLoadModels();
+    } else if (isClient && !authLoading && !user) {
+      // Clear models and data when user is not authenticated
+      setModels([]);
+      setError(null);
+      setHasLoadedModels(false); // Reset loaded flag so models can be loaded for next user
+      modelsLoadAttempted.current = false; // Reset load attempt flag
+      console.log('❌ User not authenticated, clearing models');
+    }
+  }, [user, isClient, authLoading, checkAuthAndLoadModels]);
+
+  // Helper function to update backend status with change detection
+  const updateBackendStatus = useCallback((isOnline, error = null) => {
+    setBackendStatus(prev => {
+      // Only update if status actually changed
+      if (prev.isOnline === isOnline) {
+        return {
+          ...prev,
+          lastChecked: new Date(),
+          // Only increment error count if still offline
+          errorCount: isOnline ? 0 : prev.errorCount
+        };
+      }
+      
+      // Status changed - create new state
+      return {
+        isOnline,
+        lastChecked: new Date(),
+        errorCount: isOnline ? 0 : prev.errorCount + 1
+      };
+    });
+    
+    if (!isOnline && error) {
+      console.warn('Backend connectivity issue:', error);
+    }
+  }, []);
 
   // Fetch chat sessions from backend only when authenticated
   useEffect(() => {
@@ -666,7 +566,7 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
     };
 
     loadChatSessions();
-  }, [isAuthenticated, authLoading]);
+  }, [isAuthenticated, authLoading, updateBackendStatus, toast]);
 
   // Handle deleting chat sessions
   const handleDeleteSession = async (sessionId) => {
@@ -934,19 +834,6 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
     }
   };
 
-  // Helper function to update backend status
-  const updateBackendStatus = useCallback((isOnline, error = null) => {
-    setBackendStatus(prev => ({
-      isOnline,
-      lastChecked: new Date(),
-      errorCount: isOnline ? 0 : prev.errorCount + 1
-    }));
-    
-    if (!isOnline && error) {
-      console.warn('Backend connectivity issue:', error);
-    }
-  }, []);
-
   // Enhanced new chat with session creation and backend storage
   const handleNewChat = async () => {
     const title = selectedModels.length > 0 
@@ -1038,6 +925,73 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
     adjustTextareaHeight();
   }, [inputValue]);
 
+  // Backend health check - periodic monitoring with stable interval
+  useEffect(() => {
+    let interval = null;
+    let isActive = true;
+
+    const checkBackendHealth = async () => {
+      // Don't run if component is unmounted
+      if (!isActive) return;
+
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+        
+        // Build the correct backend health URL
+        const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
+        let healthUrl;
+        
+        if (API_BASE) {
+          // Use the actual backend health endpoint
+          healthUrl = `${API_BASE}/health`;
+        } else {
+          // Fallback to local health endpoint (this might not work correctly)
+          healthUrl = '/api/health';
+        }
+        
+        const response = await fetch(healthUrl, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        // Only update status if component is still active
+        if (isActive) {
+          if (response.ok) {
+            updateBackendStatus(true);
+          } else {
+            updateBackendStatus(false, `Backend returned ${response.status}`);
+          }
+        }
+      } catch (error) {
+        // Only update status if component is still active
+        if (isActive) {
+          if (error.name === 'AbortError') {
+            updateBackendStatus(false, 'Backend timeout');
+          } else {
+            updateBackendStatus(false, error.message);
+          }
+        }
+      }
+    };
+
+    // Check immediately on component mount
+    checkBackendHealth();
+    
+    // Then check every 30 seconds
+    interval = setInterval(checkBackendHealth, 30000);
+    
+    return () => {
+      isActive = false;
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [updateBackendStatus]); // Include updateBackendStatus dependency
+
   // Sidebar links intentionally left empty here; the Chat link was removed per request.
   const sidebarLinks = [];
 
@@ -1065,71 +1019,64 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
       />
 
       {/* Sidebar + Chat Layout */}
-      <div className="h-screen flex bg-white dark:bg-neutral-900">
+      <div className="h-screen flex bg-gray-50 dark:bg-neutral-950 p-2 gap-2">
         <Sidebar open={open} setOpen={setOpen} animate={true} locked={locked} setLocked={setLocked}>
-          <SidebarBody className="justify-between gap-4 h-full">
-            <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-              {/* Logo */}
-              <div className="flex items-center space-x-3 py-3 flex-shrink-0">
-                <div className="text-2xl">🍝</div>
-                {(open || locked) && (
-                  <div className="font-bold text-xl text-neutral-800 dark:text-neutral-100 whitespace-nowrap overflow-hidden">
-                    AI Pasta
-                  </div>
+          <SidebarBody className="flex flex-col gap-2 h-full bg-white dark:bg-neutral-900 rounded-xl shadow-sm border border-gray-200 dark:border-neutral-800 p-4">
+            <div className="flex flex-col space-y-2 flex-shrink-0">
+              {/* Logo Card */}
+              <div className={`flex items-center ${!(open || locked) ? 'justify-center p-2' : 'justify-between p-3'} bg-gray-50 dark:bg-neutral-800 rounded-lg shadow-sm`}>
+                {!(open || locked) ? (
+                  // Collapsed state - just logo centered
+                  <div className="text-2xl">🍝</div>
+                ) : (
+                  // Expanded state - logo + text + controls
+                  <>
+                    <div className="flex items-center space-x-3">
+                      <div className="text-2xl">🍝</div>
+                      <div className="font-bold text-xl text-neutral-800 dark:text-neutral-100 whitespace-nowrap overflow-hidden">
+                        AI Pasta
+                      </div>
+                    </div>
+                    {/* Pin Toggle */}
+                    <button
+                      onClick={() => {
+                        const newLocked = !locked;
+                        setLocked(newLocked);
+                        if (newLocked) {
+                          // When pinning, force sidebar open
+                          setOpen(true);
+                        }
+                      }}
+                      className={`p-2 rounded-lg transition-colors ${
+                        locked 
+                          ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400' 
+                          : 'text-neutral-500 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 hover:text-neutral-700 dark:hover:text-neutral-200'
+                      }`}
+                      title={locked ? "Unpin sidebar" : "Pin sidebar open"}
+                    >
+                      {locked ? <IconPinned className="h-4 w-4" /> : <IconPin className="h-4 w-4" />}
+                    </button>
+                  </>
                 )}
               </div>
 
-              {/* Pin Toggle - Always visible */}
-              <div className="flex-shrink-0 mb-2">
-                <button
-                  onClick={() => {
-                    const newLocked = !locked;
-                    setLocked(newLocked);
-                    if (newLocked) {
-                      // When pinning, force sidebar open
-                      setOpen(true);
-                    }
-                  }}
-                  className={`w-full flex items-center justify-center p-2 rounded-lg transition-colors ${
-                    locked 
-                      ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400' 
-                      : 'text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700 hover:text-neutral-700 dark:hover:text-neutral-200'
-                  }`}
-                  title={locked ? "Unpin sidebar" : "Pin sidebar open"}
-                >
-                  {locked ? <IconPinned className="h-5 w-5" /> : <IconPin className="h-5 w-5" />}
-                  {(open || locked) && (
-                    <span className="ml-2 text-sm font-medium whitespace-nowrap">
-                      {locked ? "Pinned" : "Pin sidebar"}
-                    </span>
-                  )}
-                </button>
-                {/* Sidebar controls */}
-              </div>
 
-              {/* New Chat button (top) */}
-              <div className="flex-shrink-0 mb-3">
-                <button
-                  onClick={handleNewChat}
-                  className="w-full flex items-center p-2 rounded-md text-neutral-700 dark:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
-                >
-                  <IconBrain className="w-4 h-4" />
-                  {(open || locked) && (
-                    <span className="ml-3 text-sm font-medium">New Chat</span>
-                  )}
-                </button>
-              </div>
 
-              {/* Backend Status Indicator */}
-              <div className="flex-shrink-0 mb-2">
-                <div className={`w-full flex items-center justify-center p-2 rounded-lg ${
+
+
+              {/* Status Card */}
+              <div className={`bg-white dark:bg-neutral-800 rounded-lg shadow-sm border border-gray-200 dark:border-neutral-700 ${!(open || locked) ? 'p-2' : 'p-3'}`}>
+                <div className={`w-full flex items-center justify-center ${!(open || locked) ? 'p-1' : 'p-2'} rounded-lg ${
                   backendStatus.isOnline 
                     ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' 
                     : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
                 }`}>
-                  <div className={`w-2 h-2 rounded-full mr-2 ${
-                    backendStatus.isOnline ? 'bg-green-500' : 'bg-red-500'
-                  }`} />
+                  <div 
+                    className={`w-3 h-3 rounded-full ${
+                      backendStatus.isOnline ? 'bg-green-500' : 'bg-red-500'
+                    } ${!(open || locked) ? 'animate-pulse' : 'mr-2'}`}
+                    title={backendStatus.isOnline ? 'Backend Online' : 'Backend Offline'}
+                  />
                   {(open || locked) && (
                     <span className="text-xs font-medium">
                       {backendStatus.isOnline ? 'Backend Online' : 'Offline Mode'}
@@ -1138,28 +1085,13 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
                 </div>
               </div>
 
-              {/* Settings - open modal */}
-              <div className="flex-shrink-0 mb-4">
-                <button
-                  onClick={() => setIsSettingsOpen(true)}
-                  className="w-full flex items-center p-2 rounded-lg text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700 hover:text-neutral-800 dark:hover:text-neutral-100 transition-colors"
-                >
-                  <IconSettings className="h-5 w-5 flex-shrink-0" />
-                  {(open || locked) && (
-                    <span className="ml-3 text-sm font-medium whitespace-nowrap">
-                      Settings
-                    </span>
-                  )}
-                </button>
-              </div>
-
               {/* Navigation */}
               <div className="flex flex-col gap-1 flex-shrink-0">
                 {sidebarLinks.map((link, idx) => (
                   <a
                     key={idx}
                     href={link.href}
-                    className="flex items-center p-2 rounded-lg text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700 hover:text-neutral-800 dark:hover:text-neutral-100 transition-colors"
+                    className={`flex items-center ${!(open || locked) ? 'p-1 justify-center' : 'p-2'} rounded-lg text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700 hover:text-neutral-800 dark:hover:text-neutral-100 transition-colors`}
                   >
                     {link.icon}
                     {(open || locked) && (
@@ -1171,105 +1103,115 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
                 ))}
               </div>
 
-              {/* Chat History Section - Only show when open or locked */}
-              {(open || locked) && (
-                <div className="mt-6 flex-shrink-0">
-                  <div className="flex items-center justify-between mb-3 px-2">
-                    <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">
-                      Recent Chats
-                    </div>
-                    <button
-                      onClick={handleNewChat}
-                      className="text-xs text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 font-medium"
-                    >
-                      New Chat
-                    </button>
+            </div>
+
+            {/* Chat History Card - Only show when open or locked */}
+            {(open || locked) && (
+              <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-sm border border-gray-200 dark:border-neutral-700 p-3 flex-1 min-h-0 overflow-hidden flex flex-col">
+                <div className="flex items-center justify-between mb-3 min-w-0 flex-shrink-0">
+                  <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider truncate">
+                    Recent Chats
                   </div>
-                  
+                  <button
+                    onClick={handleNewChat}
+                    className="text-xs text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 font-medium px-2 py-1 rounded-md hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors flex-shrink-0"
+                  >
+                    New Chat
+                  </button>
+                </div>
+                
+                <div className="overflow-hidden rounded-lg bg-gray-50 dark:bg-neutral-700 p-2 min-w-0 flex-1 flex flex-col relative">
                   {chatSessionsLoading ? (
-                    <div className="text-xs text-neutral-400 dark:text-neutral-500 p-3 rounded-lg bg-neutral-100 dark:bg-neutral-800">
+                    <div className="text-xs text-neutral-400 dark:text-neutral-500 p-3 text-center">
                       Loading chats...
                     </div>
                   ) : chatSessions.length === 0 ? (
-                    <div className="text-xs text-neutral-400 dark:text-neutral-500 p-3 rounded-lg bg-neutral-100 dark:bg-neutral-800">
+                    <div className="text-xs text-neutral-400 dark:text-neutral-500 p-3 text-center">
                       No chat history yet
                     </div>
                   ) : (
-                    <div className="space-y-1 max-h-48 overflow-y-auto scrollbar-custom">
+                    <>
+                      <div className="space-y-0.5 flex-1 overflow-y-auto overflow-x-hidden scrollbar-custom min-w-0">
                       {chatSessions.map((session) => (
                         <div
                           key={session._id}
-                          className={`flex items-center group rounded-lg ${
+                          className={`grid grid-cols-[1fr_auto] items-center group rounded-lg transition-all shadow-sm min-w-0 ${
                             currentSessionId === session._id
-                              ? 'bg-purple-100 dark:bg-purple-900/30'
-                              : 'hover:bg-neutral-100 dark:hover:bg-neutral-800'
+                              ? 'bg-purple-100 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800'
+                              : 'bg-white dark:bg-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-700 border border-transparent hover:border-gray-200 dark:hover:border-neutral-700'
                           }`}
                         >
                           <button
                             onClick={() => handleLoadChat(session._id)}
-                            className="flex-1 text-left p-2 text-xs transition-colors"
+                            className="text-left p-2 text-xs transition-colors min-w-0 w-full"
                           >
-                            <div className={`font-medium truncate flex items-center gap-1 ${
+                            <div className={`font-medium truncate min-w-0 text-xs ${
                               currentSessionId === session._id
                                 ? 'text-purple-700 dark:text-purple-300'
                                 : 'text-neutral-600 dark:text-neutral-400'
                             }`}>
                               {session.title}
                               {session.isLocal && (
-                                <span className="text-orange-500 text-xs" title="Local session">●</span>
+                                <span className="text-orange-500 text-xs ml-1" title="Local session">●</span>
                               )}
                             </div>
-                            <div className="text-neutral-400 dark:text-neutral-500 mt-1">
+                            <div className="text-neutral-400 dark:text-neutral-500 mt-0.5 truncate text-xs opacity-75">
                               {new Date(session.createdAt).toLocaleDateString()}
                               {session.isLocal && <span className="ml-1 text-orange-400">(Local)</span>}
                             </div>
                           </button>
                           <button
                             onClick={() => handleDeleteSession(session._id)}
-                            className="opacity-0 group-hover:opacity-100 p-1 text-neutral-400 hover:text-red-500 transition-all mr-2"
+                            className="opacity-0 group-hover:opacity-100 p-1.5 text-neutral-400 hover:text-red-500 transition-all rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 flex-shrink-0"
                             title="Delete chat"
                           >
                             <IconTrash className="w-3 h-3" />
                           </button>
                         </div>
                       ))}
-                    </div>
+                      </div>
+                      {/* Subtle fade indicator for scrollable content */}
+                      {chatSessions.length > 8 && (
+                        <div className="absolute bottom-0 left-0 right-0 h-4 bg-gradient-to-t from-gray-50 dark:from-neutral-700 to-transparent pointer-events-none rounded-b-lg"></div>
+                      )}
+                    </>
                   )}
                 </div>
-              )}
-
-              {/* Spacer to push wallet to bottom */}
-              <div className="flex-1"></div>
-
-              {/* Wallet moved to Settings modal (see header Settings button) */}
-
-              {/* Logout will be rendered in SidebarFooter to ensure it's always at the bottom */}
-
-            </div>
-              {/* Sidebar footer - logout placed here to remain at bottom */}
-              <SidebarFooter>
-                <div className="w-full">
-                  <button
-                    onClick={async () => {
-                      await logout();
-                      // Intentionally do not redirect after logout
-                    }}
-                    className="w-full flex items-center p-2 rounded-md text-neutral-700 dark:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
-                  >
-                    <IconLogout className="w-5 h-5" />
-                    {(open || locked) && (
+              </div>
+            )}
+              {/* Sidebar footer - only show when expanded */}
+              {(open || locked) && (
+                <SidebarFooter className="px-0">
+                  {/* Combined Theme & Logout Container - matches Recent Chats styling */}
+                  <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-sm border border-gray-200 dark:border-neutral-700 p-3 space-y-2">
+                    {/* Theme Toggle */}
+                    <div className="flex items-center p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-neutral-700 transition-colors">
+                      <ThemeToggle size="sm" />
+                      <span className="ml-3 text-sm font-medium text-neutral-700 dark:text-neutral-200">
+                        Theme
+                      </span>
+                    </div>
+                    {/* Logout Button */}
+                    <button
+                      onClick={async () => {
+                        await logout();
+                        // Intentionally do not redirect after logout
+                      }}
+                      className="w-full flex items-center p-2 rounded-lg text-neutral-700 dark:text-neutral-200 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                    >
+                      <IconLogout className="w-5 h-5" />
                       <span className="ml-3 text-sm font-medium">Logout</span>
-                    )}
-                  </button>
-                </div>
-              </SidebarFooter>
+                    </button>
+                  </div>
+                </SidebarFooter>
+              )}
           </SidebarBody>
         </Sidebar>
 
         {/* Main Chat Area */}
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-neutral-900 rounded-xl shadow-sm border border-gray-200 dark:border-neutral-800">
           {/* Chat Header */}
-          <div className="bg-white dark:bg-neutral-800 border-b border-neutral-200 dark:border-neutral-700 p-4">
+          <div className="bg-gradient-to-r from-white to-gray-50 dark:from-neutral-800 dark:to-neutral-700 border-b border-neutral-200 dark:border-neutral-700 p-4 rounded-t-xl">
             <div className="flex items-center justify-between">
               <div className="flex-1 min-w-0">
                 <h1 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
@@ -1287,28 +1229,30 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
                 )}
               </div>
               
-              {/* Model Selection Button */}
-              <button
-                onClick={() => setShowModelModal(true)}
-                disabled={modelsLoading}
-                className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white rounded-lg transition-colors"
-              >
-                <IconBrain className="w-4 h-4" />
-                <span className="text-sm font-medium">
-                  {modelsLoading && 'Loading Models...'}
-                  {!modelsLoading && selectedModels.length === 0 && 'Select Models'}
-                  {!modelsLoading && selectedModels.length === 1 && 'Change Model'}
-                  {!modelsLoading && selectedModels.length > 1 && `${selectedModels.length} Selected`}
-                </span>
-              </button>
-              {/* Settings modal trigger in header */}
-              <button
-                onClick={() => setIsSettingsOpen(true)}
-                className="ml-3 px-3 py-2 bg-white/10 hover:bg-white/20 text-neutral-800 dark:text-neutral-200 rounded-lg transition-colors"
-                title="Settings"
-              >
-                <IconSettings className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                {/* Model Selection Button */}
+                <button
+                  onClick={() => setShowModelModal(true)}
+                  disabled={modelsLoading}
+                  className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white rounded-lg transition-colors shadow-sm"
+                >
+                  <IconBrain className="w-4 h-4" />
+                  <span className="text-sm font-medium">
+                    {modelsLoading && 'Loading Models...'}
+                    {!modelsLoading && selectedModels.length === 0 && 'Select Models'}
+                    {!modelsLoading && selectedModels.length === 1 && 'Change Model'}
+                    {!modelsLoading && selectedModels.length > 1 && `${selectedModels.length} Selected`}
+                  </span>
+                </button>
+                {/* Settings modal trigger in header */}
+                <button
+                  onClick={() => setIsSettingsOpen(true)}
+                  className="px-3 py-2 bg-white dark:bg-neutral-700 hover:bg-gray-50 dark:hover:bg-neutral-600 text-neutral-800 dark:text-neutral-200 rounded-lg transition-colors border border-gray-200 dark:border-neutral-600 shadow-sm"
+                  title="Settings"
+                >
+                  <IconSettings className="w-5 h-5" />
+                </button>
+              </div>
               {/* Header Logout Button - always accessible */}
               <button
                 onClick={async () => {
@@ -1338,36 +1282,38 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
           </div>
 
           {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto scrollbar-custom p-4 chat-window">
+          <div className="flex-1 overflow-y-auto scrollbar-custom py-6 chat-window bg-gray-50 dark:bg-neutral-800">
             {messages.length === 0 && (
-              <div className="text-center text-neutral-500 dark:text-neutral-400 mt-8">
-                <IconBrain className="w-16 h-16 mx-auto mb-6 opacity-50" />
-                {selectedModels.length === 0 ? (
-                  <>
-                    <h2 className="text-xl font-medium mb-2">Welcome to AI Pasta</h2>
-                    <p>Click &quot;Select Models&quot; above to choose AI models and start chatting</p>
-                  </>
-                ) : selectedModels.length === 1 ? (
-                  <>
-                    <h2 className="text-xl font-medium mb-2">Chat with {selectedModels[0].name}</h2>
-                    <p>Start a conversation by typing your message below</p>
-                  </>
-                ) : (
-                  <>
-                    <h2 className="text-xl font-medium mb-2">Multi-Model Chat Ready</h2>
-                    <p>Your message will be sent to {selectedModels.length} AI models simultaneously</p>
-                    <div className="flex flex-wrap justify-center gap-2 mt-4">
-                      {selectedModels.map(model => (
-                        <span
-                          key={model.id}
-                          className="inline-flex items-center px-3 py-1 bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 text-sm rounded-full"
-                        >
-                          {model.name}
-                        </span>
-                      ))}
-                    </div>
-                  </>
-                )}
+              <div className="text-center text-neutral-500 dark:text-neutral-400 py-16 px-4">
+                <div className="bg-white dark:bg-neutral-800 rounded-2xl p-8 max-w-md mx-auto shadow-sm border border-gray-200 dark:border-neutral-700">
+                  <IconBrain className="w-16 h-16 mx-auto mb-6 opacity-50 text-purple-400" />
+                  {selectedModels.length === 0 ? (
+                    <>
+                      <h2 className="text-xl font-medium mb-2 text-neutral-900 dark:text-neutral-100">Welcome to AI Pasta</h2>
+                      <p className="text-neutral-600 dark:text-neutral-400">Click &quot;Select Models&quot; above to choose AI models and start chatting</p>
+                    </>
+                  ) : selectedModels.length === 1 ? (
+                    <>
+                      <h2 className="text-xl font-medium mb-2 text-neutral-900 dark:text-neutral-100">Chat with {selectedModels[0].name}</h2>
+                      <p className="text-neutral-600 dark:text-neutral-400">Start a conversation by typing your message below</p>
+                    </>
+                  ) : (
+                    <>
+                      <h2 className="text-xl font-medium mb-2 text-neutral-900 dark:text-neutral-100">Multi-Model Chat Ready</h2>
+                      <p className="text-neutral-600 dark:text-neutral-400 mb-4">Your message will be sent to {selectedModels.length} AI models simultaneously</p>
+                      <div className="flex flex-wrap justify-center gap-2">
+                        {selectedModels.map(model => (
+                          <span
+                            key={model.id}
+                            className="inline-flex items-center px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-sm rounded-full border border-purple-200 dark:border-purple-800"
+                          >
+                            {model.name}
+                          </span>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             )}
             
@@ -1387,7 +1333,7 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
                 const responseData = item.data;
                 return (
                   <div key={`responses-${index}`} className="mb-6">
-                    <OptimizedMultiResponseContainer
+                    <MultiResponseContainer
                       responses={responseData.responses}
                       timestamp={responseData.timestamp}
                       attachments={[]}
@@ -1402,10 +1348,10 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
 
             {/* Loading indicator */}
             {(isSubmitting && !hasActiveResponses) && (
-              <div className="mb-6">
-                <div className="bg-neutral-100 dark:bg-neutral-700 rounded-xl p-4 max-w-xs">
+              <div className="mb-6 px-4">
+                <div className="bg-white dark:bg-neutral-800 rounded-xl p-4 max-w-xs shadow-sm border border-gray-200 dark:border-neutral-700">
                   <div className="flex items-center space-x-3 text-neutral-600 dark:text-neutral-400">
-                    <div className="animate-spin w-4 h-4 border-2 border-neutral-400 border-t-neutral-600 rounded-full"></div>
+                    <div className="animate-spin w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full"></div>
                     <span className="text-sm">Preparing responses...</span>
                   </div>
                 </div>
@@ -1416,94 +1362,71 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
           </div>
 
           {/* Input Area - Fixed at Bottom */}
-          <div className="bg-white dark:bg-neutral-800 border-t border-neutral-200 dark:border-neutral-700 p-4">
-            {/* Token Estimation UI removed per user request */}
-
-            {/* Low Credits Warning */}
-            {isAuthenticated && isClient && credits <= 0 && (
-              <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg mb-3">
-                <IconAlertTriangle className="w-5 h-5 text-red-600" />
-                <div className="text-sm text-red-700 dark:text-red-300">
-                  No tokens remaining. Please upgrade your account to continue.
-                </div>
-              </div>
-            )}
-
-            {/* Insufficient Tokens for Current Request Warning */}
-            {isAuthenticated && isClient && credits > 0 && selectedModels.length > 0 && (
-              (() => {
-                const tokensNeeded = selectedModels.reduce((total, model) => {
-                  const isPaidModel = model.pricing && (model.pricing.input > 0 || model.pricing.output > 0);
-                  return total + (isPaidModel ? 10 : 1);
-                }, 0);
-                return tokensNeeded > credits ? (
-                  <div className="flex items-center gap-2 p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg mb-3">
-                    <IconAlertTriangle className="w-5 h-5 text-orange-600" />
-                    <div className="text-sm text-orange-700 dark:text-orange-300">
-                      Insufficient tokens: have {credits}, need {tokensNeeded} tokens
-                    </div>
+          <div className="p-4 bg-gray-50 dark:bg-neutral-800 border-t border-gray-200 dark:border-neutral-700 rounded-b-xl">
+            {/* Warning Cards */}
+            <div className="space-y-2 mb-4">
+              {/* Low Credits Warning */}
+              {isAuthenticated && isClient && credits <= 0 && (
+                <div className="flex items-center gap-3 p-4 bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg shadow-sm">
+                  <IconAlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0" />
+                  <div className="text-sm text-red-700 dark:text-red-300">
+                    No tokens remaining. Please upgrade your account to continue.
                   </div>
-                ) : null;
-              })()
-            )}
+                </div>
+              )}
 
-            {/* Input Box */}
-            <div className="bg-neutral-100 dark:bg-neutral-700 rounded-2xl p-3">
-              <div className="flex items-end gap-3">
-                {/* Upload Button */}
-                <SimpleUploadButton
-                  attachedFiles={attachedFiles}
-                  onFilesChange={setAttachedFiles}
-                  selectedModels={selectedModels}
-                  disabled={isSubmitting}
-                />
+              {/* Insufficient Tokens for Current Request Warning */}
+              {isAuthenticated && isClient && credits > 0 && selectedModels.length > 0 && (
+                (() => {
+                  const tokensNeeded = selectedModels.reduce((total, model) => {
+                    const isPaidModel = model.pricing && (model.pricing.input > 0 || model.pricing.output > 0);
+                    return total + (isPaidModel ? 10 : 1);
+                  }, 0);
+                  return tokensNeeded > credits ? (
+                    <div className="flex items-center gap-3 p-4 bg-orange-100 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800 rounded-lg shadow-sm">
+                      <IconAlertTriangle className="w-5 h-5 text-orange-600 flex-shrink-0" />
+                      <div className="text-sm text-orange-700 dark:text-orange-300">
+                        Insufficient tokens: have {credits}, need {tokensNeeded} tokens
+                      </div>
+                    </div>
+                  ) : null;
+                })()
+              )}
+            </div>
 
-                {/* Text Input */}
-                <div className="flex-1">
-                  <textarea
-                    ref={textareaRef}
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    placeholder={
-                      selectedModels.length === 0 
-                        ? "Select models to start chatting..." 
-                        : selectedModels.length === 1 
-                          ? `Message ${selectedModels[0].name}...`
-                          : `Message ${selectedModels.length} AI models...`
+            {/* Input Card */}
+            <div className="flex justify-center">
+              <div className="relative w-full max-w-6xl bg-white dark:bg-neutral-900 rounded-xl shadow-lg border border-gray-300 dark:border-neutral-600 p-2">
+                <div 
+                  style={{ 
+                    opacity: isSubmitting || selectedModels.length === 0 || (isClient && credits <= 0) ? 0.5 : 1, 
+                    pointerEvents: isSubmitting || selectedModels.length === 0 || (isClient && credits <= 0) ? 'none' : 'auto' 
+                  }}
+                >
+                  <PlaceholdersAndVanishInput
+                    placeholders={selectedModels.length === 0 
+                      ? ["Select models to start chatting..."] 
+                      : AI_CHAT_PLACEHOLDERS
                     }
-                    className="w-full resize-none bg-transparent border-none focus:outline-none dark:text-neutral-100 placeholder-neutral-500 dark:placeholder-neutral-400"
-                    rows="1"
-                    style={{ minHeight: '24px', maxHeight: '120px' }}
-                    disabled={isSubmitting}
-                    spellCheck="false"
-                    suppressHydrationWarning={true}
+                    onChange={(e) => {
+                      setInputValue(e.target.value);
+                    }}
+                    onSubmit={(e) => {
+                      if ((inputValue.trim() || attachedFiles.length > 0) && !isSubmitting && selectedModels.length > 0 && !(isClient && credits <= 0)) {
+                        sendMessage();
+                        // The component will clear its own value after the vanish animation
+                        // We need to clear our local state too
+                        setTimeout(() => setInputValue(''), 100);
+                      }
+                    }}
                   />
                 </div>
                 
-                {/* Send Button */}
-                <button
-                  onClick={sendMessage}
-                  disabled={(!inputValue.trim() && attachedFiles.length === 0) || isSubmitting || selectedModels.length === 0 || (isClient && credits <= 0)}
-                  className="p-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {isSubmitting || hasActiveResponses ? (
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  ) : (
-                    <IconSend className="w-5 h-5" />
-                  )}
-                </button>
-              </div>
-              
-              {/* Help Text */}
-              <div className="flex items-center justify-between mt-2 px-1">
-                <span className="text-xs text-neutral-500 dark:text-neutral-400">
-                  Press Enter to send, Shift+Enter for new line
-                </span>
-                {selectedModels.length > 1 && (
-                  <span className="text-xs text-purple-600 dark:text-purple-400">
-                    Sending to {selectedModels.length} models
-                  </span>
+                {/* Loading overlay */}
+                {(isSubmitting || hasActiveResponses) && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-white/90 dark:bg-neutral-900/90 rounded-xl pointer-events-none backdrop-blur-sm">
+                    <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+                  </div>
                 )}
               </div>
             </div>
@@ -1575,7 +1498,7 @@ export default function ChatPage() {
         setToastShown(false);
       }
     }
-  }, [user, authLoading]); // Remove toast from dependencies
+  }, [user, authLoading, toast, toastShown]);
 
   // Show loading screen while checking authentication
   if (authLoading) {

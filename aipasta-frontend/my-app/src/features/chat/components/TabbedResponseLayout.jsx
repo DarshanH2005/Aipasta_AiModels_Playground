@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { IconCopy, IconCheck, IconRobot, IconCurrency, IconLoader } from '@tabler/icons-react';
-import { formatCurrency, formatTokens } from '../../lib/wallet';
-import MarkdownRenderer from './markdown-renderer';
+import { formatCurrency, formatTokens } from '../../../lib/wallet';
+import MarkdownRenderer from '../../../shared/components/MarkdownRenderer';
 
 const TabbedResponseLayout = ({ responses, timestamp, attachments }) => {
   const [activeTab, setActiveTab] = useState(0);

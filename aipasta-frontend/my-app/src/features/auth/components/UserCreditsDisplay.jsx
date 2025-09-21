@@ -1,7 +1,7 @@
 import React from 'react';
 import { IconCoins, IconUser, IconLogout } from '@tabler/icons-react';
-import { useAuth } from '../../contexts/AuthContext';
-import { useToast } from '../ui/toast-notifications';
+import { useAuth } from '../../../contexts/AuthContext';
+import { useToast } from '../../../shared';
 
 const UserCreditsDisplay = ({ onAuthClick }) => {
   const { user, credits, logout, isAuthenticated } = useAuth();

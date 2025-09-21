@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { IconChevronDown, IconPhoto, IconMusic, IconCurrency, IconCheck, IconSelector } from '@tabler/icons-react';
-import { formatCurrency } from '../../lib/wallet';
+import { formatCurrency } from '../../../lib/wallet';
 
 const MultiModelSelector = ({ selectedModels = [], onModelsChange, models = [] }) => {
   const [isOpen, setIsOpen] = useState(false);

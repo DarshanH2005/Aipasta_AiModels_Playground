@@ -1,6 +1,6 @@
 import React from 'react';
 import { IconX, IconUser, IconWallet } from '@tabler/icons-react';
-import WalletDisplay from './wallet-display';
+import WalletDisplay from './WalletDisplay';
 import { useAuth } from '../../contexts/AuthContext';
 
 const SettingsModal = ({ isOpen, onClose, onUpgradeClick }) => {

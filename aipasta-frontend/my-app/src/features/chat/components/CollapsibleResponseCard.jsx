@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { IconChevronDown, IconChevronUp, IconCopy, IconCheck } from '@tabler/icons-react';
-import { formatCurrency } from '../../lib/wallet';
+import { formatCurrency } from '../../../lib/wallet';
 
 const CollapsibleResponseCard = ({ 
   response,

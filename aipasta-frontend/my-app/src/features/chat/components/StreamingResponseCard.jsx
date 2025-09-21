@@ -1,7 +1,7 @@
 import React, { memo, useState, useEffect, useRef } from 'react';
 import { IconChevronDown, IconChevronUp, IconCopy, IconCheck, IconLoader, IconRobot } from '@tabler/icons-react';
-import { formatCurrency } from '../../lib/wallet';
-import MarkdownRenderer from './markdown-renderer';
+import { formatCurrency } from '../../../lib/wallet';
+import MarkdownRenderer from '../../../shared/components/MarkdownRenderer';
 
 // Virtualized content component with Markdown support
 const VirtualizedContent = memo(({ content, maxHeight = 400, className = "" }) => {

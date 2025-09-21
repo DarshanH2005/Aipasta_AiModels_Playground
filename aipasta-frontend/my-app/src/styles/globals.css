@@ -1,12 +1,44 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.13 0.028 261.692);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --radius: 0.625rem;
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.13 0.028 261.692);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.13 0.028 261.692);
+  --primary: oklch(0.21 0.034 264.665);
+  --primary-foreground: oklch(0.985 0.002 247.839);
+  --secondary: oklch(0.967 0.003 264.542);
+  --secondary-foreground: oklch(0.21 0.034 264.665);
+  --muted: oklch(0.967 0.003 264.542);
+  --muted-foreground: oklch(0.551 0.027 264.364);
+  --accent: oklch(0.967 0.003 264.542);
+  --accent-foreground: oklch(0.21 0.034 264.665);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.928 0.006 264.531);
+  --input: oklch(0.928 0.006 264.531);
+  --ring: oklch(0.707 0.022 261.325);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.985 0.002 247.839);
+  --sidebar-foreground: oklch(0.13 0.028 261.692);
+  --sidebar-primary: oklch(0.21 0.034 264.665);
+  --sidebar-primary-foreground: oklch(0.985 0.002 247.839);
+  --sidebar-accent: oklch(0.967 0.003 264.542);
+  --sidebar-accent-foreground: oklch(0.21 0.034 264.665);
+  --sidebar-border: oklch(0.928 0.006 264.531);
+  --sidebar-ring: oklch(0.707 0.022 261.325);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -16,10 +48,111 @@
   }
 }
 
+/* Theme transition for smooth dark/light mode switching */
+* {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Enhanced dark mode class-based theming */
+.dark {
+  color-scheme: dark;
+}
+
+.light {
+  color-scheme: light;
+}
+
+/* Forced theme styling using CSS variables */
+body {
+  background-color: var(--bg-primary, var(--background)) !important;
+  color: var(--text-primary, var(--foreground)) !important;
+}
+
+/* Strong theme application - Dark Mode */
+html.dark,
+html[data-theme="dark"],
+.dark {
+  --background: #1a1a1a !important;
+  --foreground: #e5e5e5 !important;
+  background-color: #1a1a1a !important;
+  color: #e5e5e5 !important;
+}
+
+html.dark body,
+html[data-theme="dark"] body,
+.dark body {
+  background-color: #1a1a1a !important;
+  color: #e5e5e5 !important;
+}
+
+/* Strong theme application - Light Mode */
+html.light,
+html[data-theme="light"],
+.light {
+  --background: #ffffff !important;
+  --foreground: #1e293b !important;
+  background-color: #ffffff !important;
+  color: #1e293b !important;
+}
+
+html.light body,
+html[data-theme="light"] body,
+.light body {
+  background-color: #ffffff !important;
+  color: #1e293b !important;
+}
+
+/* Override any conflicting styles */
+html.dark *,
+html[data-theme="dark"] *,
+.dark * {
+  border-color: #404040 !important;
+}
+
+html.light *,
+html[data-theme="light"] *,
+.light * {
+  border-color: #e5e7eb !important;
+}
+
+/* Ensure main containers respect theme */
+html.dark .bg-white,
+html[data-theme="dark"] .bg-white {
+  background-color: #2a2a2a !important;
+}
+
+html.dark .text-black,
+html[data-theme="dark"] .text-black {
+  color: #e5e5e5 !important;
+}
+
+html.light .bg-gray-900,
+html[data-theme="light"] .bg-gray-900 {
+  background-color: #ffffff !important;
+}
+
+html.light .text-white,
+html[data-theme="light"] .text-white {
+  color: #111827 !important;
+}
+
+/* Chat input box dark theme overrides */
+html.dark form[class*="bg-white"],
+html[data-theme="dark"] form[class*="bg-white"] {
+  background-color: #27272a !important;
+  color: #e5e5e5 !important;
+  box-shadow: 0px 2px 3px -1px rgba(255,255,255,0.1), 0px 1px 0px 0px rgba(255,255,255,0.02), 0px 0px 0px 1px rgba(255,255,255,0.08) !important;
+}
+
+html.dark input[class*="text-black"],
+html[data-theme="dark"] input[class*="text-black"] {
+  color: #e5e5e5 !important;
 }
 
 /* Apply custom scrollbar globally to common scrollable elements */
@@ -123,16 +256,16 @@ body {
   * {
     scrollbar-color: rgb(75 85 99) transparent;
   }
-  
+
   *::-webkit-scrollbar-track {
     background: rgba(75, 85, 99, 0.1);
   }
-  
+
   *::-webkit-scrollbar-thumb {
     background: linear-gradient(135deg, rgb(75 85 99), rgb(55 65 81));
     background-clip: content-box;
   }
-  
+
   *::-webkit-scrollbar-thumb:hover {
     background: linear-gradient(135deg, rgb(107 114 128), rgb(156 163 175));
     background-clip: content-box;
@@ -145,7 +278,7 @@ body {
   .overflow-x-auto {
     scrollbar-color: rgb(75 85 99) transparent;
   }
-  
+
   .scrollbar-custom::-webkit-scrollbar-track,
   .chat-window::-webkit-scrollbar-track,
   .overflow-auto::-webkit-scrollbar-track,
@@ -153,7 +286,7 @@ body {
   .overflow-x-auto::-webkit-scrollbar-track {
     background: rgba(75, 85, 99, 0.1);
   }
-  
+
   .scrollbar-custom::-webkit-scrollbar-thumb,
   .chat-window::-webkit-scrollbar-thumb,
   .overflow-auto::-webkit-scrollbar-thumb,
@@ -162,7 +295,7 @@ body {
     background: linear-gradient(135deg, rgb(75 85 99), rgb(55 65 81));
     background-clip: content-box;
   }
-  
+
   .scrollbar-custom::-webkit-scrollbar-thumb:hover,
   .chat-window::-webkit-scrollbar-thumb:hover,
   .overflow-auto::-webkit-scrollbar-thumb:hover,
@@ -172,3 +305,41 @@ body {
     background-clip: content-box;
   }
 }
+
+/* Removed incompatible @theme directive for better compatibility */
+
+.dark {
+  --background: oklch(0.13 0.028 261.692);
+  --foreground: oklch(0.985 0.002 247.839);
+  --card: oklch(0.21 0.034 264.665);
+  --card-foreground: oklch(0.985 0.002 247.839);
+  --popover: oklch(0.21 0.034 264.665);
+  --popover-foreground: oklch(0.985 0.002 247.839);
+  --primary: oklch(0.928 0.006 264.531);
+  --primary-foreground: oklch(0.21 0.034 264.665);
+  --secondary: oklch(0.278 0.033 256.848);
+  --secondary-foreground: oklch(0.985 0.002 247.839);
+  --muted: oklch(0.278 0.033 256.848);
+  --muted-foreground: oklch(0.707 0.022 261.325);
+  --accent: oklch(0.278 0.033 256.848);
+  --accent-foreground: oklch(0.985 0.002 247.839);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.551 0.027 264.364);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.21 0.034 264.665);
+  --sidebar-foreground: oklch(0.985 0.002 247.839);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0.002 247.839);
+  --sidebar-accent: oklch(0.278 0.033 256.848);
+  --sidebar-accent-foreground: oklch(0.985 0.002 247.839);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.551 0.027 264.364);
+}
+
+/* Removed incompatible @layer and @apply directives for better compatibility */

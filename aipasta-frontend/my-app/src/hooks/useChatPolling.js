@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { getChatMessages } from '../lib/api-client';
 
 export function useChatPolling(sessionId, enabled = true, interval = 2000) {
@@ -8,7 +8,7 @@ export function useChatPolling(sessionId, enabled = true, interval = 2000) {
   const intervalRef = useRef(null);
   const lastFetchRef = useRef(null);
 
-  const fetchMessages = async () => {
+  const fetchMessages = useCallback(async () => {
     if (!sessionId || !enabled) return;
 
     try {
@@ -26,7 +26,7 @@ export function useChatPolling(sessionId, enabled = true, interval = 2000) {
       console.error('Error fetching chat messages:', err);
       setError(err);
     }
-  };
+  }, [sessionId, enabled]);
 
   // Initial load
   useEffect(() => {
@@ -34,7 +34,7 @@ export function useChatPolling(sessionId, enabled = true, interval = 2000) {
       setIsLoading(true);
       fetchMessages().finally(() => setIsLoading(false));
     }
-  }, [sessionId]);
+  }, [sessionId, fetchMessages]);
 
   // Polling
   useEffect(() => {
@@ -54,7 +54,7 @@ export function useChatPolling(sessionId, enabled = true, interval = 2000) {
         intervalRef.current = null;
       }
     };
-  }, [sessionId, enabled, interval]);
+  }, [sessionId, enabled, interval, fetchMessages]);
 
   const updateTurn = (turnId, updatedTurn) => {
     setConversationTurns(prev => 
