@@ -97,6 +97,28 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Temporary IP check endpoint for MongoDB whitelist
+app.get('/api/check-ip', async (req, res) => {
+  try {
+    const fetch = require('node-fetch');
+    const response = await fetch('https://api.ipify.org?format=json');
+    const data = await response.json();
+    console.log('🌐 Render Server IP:', data.ip);
+    res.json({
+      message: 'Add this IP to MongoDB Atlas whitelist',
+      serverIP: data.ip,
+      instructions: 'Go to MongoDB Atlas → Security → Network Access → Add IP Address'
+    });
+  } catch (error) {
+    console.error('❌ Error getting IP:', error);
+    res.json({
+      message: 'Could not fetch IP',
+      error: error.message,
+      fallback: 'Use 0.0.0.0/0 to allow all IPs temporarily'
+    });
+  }
+});
+
 // API Routes
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/models', optionalAuth, modelsRoutes);
