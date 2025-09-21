@@ -120,3 +120,8 @@ Desktop.ini
 # MacOS
 .AppleDouble
 .LSOverride
+
+# Project-specific ignores
+.github/
+*.md
+!README.md
