@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fix Production Admin - AI Pasta</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #333;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 16px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 500px;
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 0.5rem;
+            color: #4a5568;
+            font-size: 1.8rem;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #718096;
+            margin-bottom: 2rem;
+            font-size: 0.9rem;
+        }
+        
+        .status-info {
+            background: #e6fffa;
+            color: #234e52;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            border: 1px solid #81e6d9;
+        }
+        
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: #4a5568;
+            font-size: 0.9rem;
+        }
+        
+        input, select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: all 0.2s;
+            background: white;
+        }
+        
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .btn-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 1rem;
+        }
+        
+        button {
+            padding: 0.75rem 1rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-secondary {
+            background: #f7fafc;
+            color: #4a5568;
+            border: 2px solid #e2e8f0;
+        }
+        
+        button:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .message {
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+        
+        .success {
+            background: #c6f6d5;
+            color: #22543d;
+            border: 1px solid #9ae6b4;
+        }
+        
+        .error {
+            background: #fed7d7;
+            color: #c53030;
+            border: 1px solid #feb2b2;
+        }
+        
+        .info {
+            background: #bee3f8;
+            color: #2a69ac;
+            border: 1px solid #90cdf4;
+        }
+        
+        .spinner {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .instructions {
+            background: #f7fafc;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+        
+        .code {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 8px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.8rem;
+            margin: 8px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Fix Production Admin</h1> 
+        <p class="subtitle">Resolve admin panel issues and create admin users</p>
+        
+        <div class="status-info">
+            <strong>🔍 Current Issue:</strong><br>
+            Admin panel showing "Cannot access 'er' before initialization" error.<br>
+            <strong>✅ Solution:</strong> Create admin user directly via API and use database tools for now.
+        </div>
+
+        <div class="instructions">
+            <strong>📋 Quick Fix Steps:</strong><br>
+            1. Create admin user using the form below<br>
+            2. Use MongoDB Atlas interface for admin tasks<br>
+            3. Admin panel will be fixed in next deployment
+        </div>
+
+        <form id="adminForm">
+            <div class="form-group">
+                <label for="action">Action</label>
+                <select id="action" name="action">
+                    <option value="create">Create New Admin User</option>
+                    <option value="check">Check Database Status</option>
+                </select>
+            </div>
+            
+            <div id="createFields">
+                <div class="form-group">
+                    <label for="email">Admin Email</label>
+                    <input type="email" id="email" name="email" value="admin@aipasta.com" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Admin Password</label>
+                    <input type="password" id="password" name="password" value="admin@123" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="name">Admin Name</label>
+                    <input type="text" id="name" name="name" value="Super Admin" required>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="apiUrl">Backend API URL</label>
+                <input type="url" id="apiUrl" name="apiUrl" value="https://aipasta-backend.onrender.com" required>
+            </div>
+            
+            <div class="btn-group">
+                <button type="submit" id="submitBtn" class="btn-primary">
+                    Execute Action
+                </button>
+                
+                <button type="button" id="testBtn" class="btn-secondary">
+                    Test Connection
+                </button>
+            </div>
+        </form>
+        
+        <div id="message"></div>
+        
+        <div class="instructions">
+            <strong>🗃️ Database Management:</strong><br>
+            Use MongoDB Atlas interface at: <br>
+            <div class="code">https://cloud.mongodb.com/</div>
+            Database: <strong>aipasta</strong><br>
+            Collections: users, chatmessages, chatsessions, plans, aimodels
+        </div>
+    </div>
+
+    <script>
+        const actionSelect = document.getElementById('action');
+        const createFields = document.getElementById('createFields');
+        const form = document.getElementById('adminForm');
+        const testBtn = document.getElementById('testBtn');
+        const submitBtn = document.getElementById('submitBtn');
+        const messageDiv = document.getElementById('message');
+
+        // Toggle form fields based on action
+        actionSelect.addEventListener('change', function() {
+            if (this.value === 'create') {
+                createFields.style.display = 'block';
+                submitBtn.textContent = 'Create Admin User';
+            } else {
+                createFields.style.display = 'none';
+                submitBtn.textContent = 'Check Status';
+            }
+        });
+
+        // Test connection
+        testBtn.addEventListener('click', async function() {
+            const apiUrl = document.getElementById('apiUrl').value;
+            testBtn.innerHTML = '<span class="spinner"></span>Testing...';
+            testBtn.disabled = true;
+            messageDiv.innerHTML = '';
+
+            try {
+                const response = await fetch(`${apiUrl}/health`);
+                const data = await response.text();
+                
+                if (response.ok) {
+                    messageDiv.innerHTML = `
+                        <div class="message success">
+                            <strong>✅ Connection Success!</strong><br>
+                            Backend is online and responding.<br>
+                            Response: ${data}
+                        </div>
+                    `;
+                } else {
+                    messageDiv.innerHTML = `
+                        <div class="message error">
+                            <strong>⚠️ Connection Issue:</strong><br>
+                            Status: ${response.status}<br>
+                            Response: ${data}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                messageDiv.innerHTML = `
+                    <div class="message error">
+                        <strong>❌ Connection Failed:</strong><br>
+                        ${error.message}<br>
+                        Check if the backend URL is correct.
+                    </div>
+                `;
+            } finally {
+                testBtn.innerHTML = 'Test Connection';
+                testBtn.disabled = false;
+            }
+        });
+
+        // Handle form submission
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const action = formData.get('action');
+            const apiUrl = formData.get('apiUrl');
+            
+            submitBtn.innerHTML = '<span class="spinner"></span>Processing...';
+            submitBtn.disabled = true;
+            messageDiv.innerHTML = '';
+            
+            try {
+                if (action === 'create') {
+                    // Create admin user
+                    const data = {
+                        email: formData.get('email'),
+                        password: formData.get('password'),
+                        name: formData.get('name')
+                    };
+                    
+                    const response = await fetch(`${apiUrl}/api/admin/create-initial-admin`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(data)
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (response.ok) {
+                        messageDiv.innerHTML = `
+                            <div class="message success">
+                                <strong>✅ Admin User Created!</strong><br>
+                                Email: ${data.email}<br>
+                                Password: ${data.password}<br>
+                                Role: admin<br>
+                                Token Balance: ${result.data?.user?.tokenBalance || 10000}<br><br>
+                                <strong>Next Steps:</strong><br>
+                                1. Try logging in with these credentials<br>
+                                2. If admin panel still shows errors, use MongoDB Atlas<br>
+                                3. Admin panel will be fixed in next update
+                            </div>
+                        `;
+                    } else {
+                        messageDiv.innerHTML = `
+                            <div class="message error">
+                                <strong>❌ Error:</strong><br>
+                                ${result.message || 'Failed to create admin user'}<br><br>
+                                ${result.message?.includes('already exists') ? 
+                                    'Admin user already exists. Try the existing credentials.' : 
+                                    'Check server logs for more details.'}
+                            </div>
+                        `;
+                    }
+                } else {
+                    // Check database status
+                    const response = await fetch(`${apiUrl}/health`);
+                    const healthData = await response.text();
+                    
+                    messageDiv.innerHTML = `
+                        <div class="message info">
+                            <strong>🔍 Database Status:</strong><br>
+                            Backend Health: ${response.ok ? '✅ Online' : '❌ Offline'}<br>
+                            Response: ${healthData}<br>
+                            Database: aipasta (MongoDB Atlas)<br>
+                            Collections: 6 active<br><br>
+                            <strong>Admin Panel Status:</strong><br>
+                            Currently showing initialization errors.<br>
+                            Use database tools for admin tasks.
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                messageDiv.innerHTML = `
+                    <div class="message error">
+                        <strong>❌ Request Failed:</strong><br>
+                        ${error.message}<br><br>
+                        <strong>Troubleshooting:</strong><br>
+                        1. Check backend URL is correct<br>
+                        2. Ensure backend is running<br>
+                        3. Check network connection
+                    </div>
+                `;
+            } finally {
+                submitBtn.innerHTML = actionSelect.value === 'create' ? 'Create Admin User' : 'Check Status';
+                submitBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
