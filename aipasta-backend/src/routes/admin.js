@@ -9,7 +9,81 @@ const { validateUserUpdate, validatePagination } = require('../middleware/valida
 
 const router = express.Router();
 
-// Apply admin middleware to all routes
+// @desc    Create initial admin user (no auth required for first setup)
+// @route   POST /api/admin/create-initial-admin
+// @access  Public (but only works if no admin exists)
+const createInitialAdmin = async (req, res, next) => {
+  try {
+    // Check if any admin user already exists
+    const existingAdmin = await User.findOne({ role: 'admin' });
+    
+    if (existingAdmin) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Admin user already exists. Use regular admin panel to manage users.'
+      });
+    }
+
+    const { email, password, name } = req.body;
+    
+    // Validate required fields
+    if (!email || !password) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Email and password are required'
+      });
+    }
+
+    // Create admin user
+    const adminUser = new User({
+      email: email,
+      password: password, // Pre-save middleware will hash this
+      name: name || 'Admin User',
+      role: 'admin',
+      authProvider: 'local',
+      isActive: true,
+      tokens: {
+        balance: 10000,
+        used: 0,
+        lastUpdated: new Date()
+      },
+      preferences: {
+        theme: 'light',
+        language: 'en',
+        notifications: true
+      },
+      usage: {
+        totalRequests: 0,
+        totalTokensUsed: 0,
+        lastUsed: new Date()
+      }
+    });
+
+    const savedAdmin = await adminUser.save();
+
+    res.status(201).json({
+      status: 'success',
+      message: 'Initial admin user created successfully',
+      data: {
+        user: {
+          id: savedAdmin._id,
+          email: savedAdmin.email,
+          name: savedAdmin.name,
+          role: savedAdmin.role,
+          tokenBalance: savedAdmin.tokens.balance
+        }
+      }
+    });
+
+  } catch (error) {
+    next(new AppError(`Error creating admin user: ${error.message}`, 500));
+  }
+};
+
+// Public route for initial admin creation (before middleware)
+router.post('/create-initial-admin', createInitialAdmin);
+
+// Apply admin middleware to all other routes
 router.use(requireAdmin);
 
 // @desc    Get admin dashboard stats

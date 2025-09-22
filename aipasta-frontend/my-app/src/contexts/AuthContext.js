@@ -38,7 +38,7 @@ export const AuthProvider = ({ children }) => {
 
   // Get auth headers with token
   const getAuthHeaders = () => {
-    const token = localStorage.getItem('authToken');
+    const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
     return {
       'Content-Type': 'application/json',
       ...(token && { 'Authorization': `Bearer ${token}` })
@@ -169,9 +169,24 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
+      // Clear all user-related localStorage data
       localStorage.removeItem('authToken');
+      localStorage.removeItem('aipasta-wallet');
+      localStorage.removeItem('modelFavoriteGroups');
+      
+      // Clear session storage as well
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        sessionStorage.clear();
+      }
+      
+      // Reset all state
       setUser(null);
       setCredits(0);
+      
+      // Force a page reload to clear any cached data
+      if (typeof window !== 'undefined') {
+        window.location.href = '/';
+      }
     }
   };
 

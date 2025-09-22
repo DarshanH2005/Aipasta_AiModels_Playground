@@ -66,6 +66,14 @@ const limiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  // Skip trust proxy validation in production (Render handles this)
+  trustProxy: process.env.NODE_ENV === 'production',
+  keyGenerator: (req) => {
+    // Use X-Forwarded-For header in production, fallback to IP
+    return process.env.NODE_ENV === 'production' 
+      ? req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip
+      : req.ip;
+  }
 });
 
 app.use(limiter);
@@ -77,6 +85,14 @@ const authLimiter = rateLimit({
   message: {
     error: 'Too many authentication attempts, please try again later.',
     retryAfter: '15 minutes'
+  },
+  // Skip trust proxy validation in production (Render handles this)
+  trustProxy: process.env.NODE_ENV === 'production',
+  keyGenerator: (req) => {
+    // Use X-Forwarded-For header in production, fallback to IP
+    return process.env.NODE_ENV === 'production' 
+      ? req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip
+      : req.ip;
   }
 });
 
