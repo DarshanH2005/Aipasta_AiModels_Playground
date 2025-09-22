@@ -7,7 +7,7 @@ import { ToastProvider, useToast, SettingsModal, PlansModal, Sidebar, SidebarBod
 import ThemeToggle from '../components/ui/working-theme-toggle';
 import { IconBrain, IconRobot, IconSend, IconSettings, IconChevronDown, IconPhoto, IconMusic, IconCurrency, IconEye, IconVideo, IconFile, IconAlertTriangle, IconChevronUp, IconPinned, IconPin, IconTrash, IconLogout, IconMenu2, IconSun, IconMoon } from '@tabler/icons-react';
 import { useStreamingResponses, streamModelResponse } from '../hooks/useStreamingResponses';
-import { getChatSessions, createChatSession, getChatSession, sendChatMessage, deleteChatSession } from '../lib/api-client';
+import { getChatSessions, createChatSession, getChatSession, sendChatMessage, deleteChatSession, checkBackendHealth, retryBackendConnection } from '../lib/api-client';
 import { AI_MODELS, AI_CHAT_PLACEHOLDERS } from '../constants/models';
 import { calculateTokensNeeded, hasSufficientTokens, getTokenRequirements } from '../utils/tokens';
 
@@ -218,6 +218,8 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
   const [walletTokens, setWalletTokens] = useState(null);
   const [isClient, setIsClient] = useState(false);
   const [error, setError] = useState(null); // Add missing error state
+  const [backendOnline, setBackendOnline] = useState(true); // Backend connectivity status
+  const [isReconnecting, setIsReconnecting] = useState(false); // Reconnection attempt status
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [backendStatus, setBackendStatus] = useState({
     isOnline: true,
@@ -612,6 +614,16 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
   const sendMessage = async () => {
     if ((!inputValue.trim() && attachedFiles.length === 0) || selectedModels.length === 0 || isSubmitting) return;
 
+    // Check backend connectivity first
+    if (!backendOnline || isReconnecting) {
+      if (!isReconnecting) {
+        handleBackendOffline();
+      } else {
+        toast.warning('🔄 Reconnecting to backend, please wait...');
+      }
+      return;
+    }
+
     // Check authentication
     if (!isAuthenticated) {
       toast.warning('Please login to send messages');
@@ -622,6 +634,21 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
     // Check credits before sending
     if (credits <= 0) {
       toast.error('No credits left. Please upgrade.');
+      return;
+    }
+
+    // Double-check backend health before sending request
+    try {
+      const isHealthy = await apiClient.checkBackendHealth();
+      if (!isHealthy) {
+        setBackendOnline(false);
+        handleBackendOffline();
+        return;
+      }
+    } catch (error) {
+      console.error('Backend health check failed:', error);
+      setBackendOnline(false);
+      handleBackendOffline();
       return;
     }
 
@@ -672,12 +699,14 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
       return;
     }
 
-    // Ensure we have a chat session
+    // Ensure we have a chat session - create one using the user's message as title
     let sessionId = currentSessionId;
     if (!sessionId) {
-      const title = selectedModels.length > 0 
-        ? `Chat with ${selectedModels[0].name}` 
-        : 'New Chat';
+      // Use the user's message (trimmed to ~50 chars) as the chat title
+      const trimmedMessage = inputValue.trim();
+      const title = trimmedMessage.length > 50 
+        ? trimmedMessage.substring(0, 50).trim() + '...' 
+        : trimmedMessage;
       const firstModelId = selectedModels.length > 0 ? selectedModels[0].id : null;
       
       try {
@@ -687,12 +716,23 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
           sessionId = sessionResult.session.id || sessionResult.session._id;
           setCurrentSessionId(sessionId);
           setChatSessions(prev => [sessionResult.session, ...prev]);
-          console.log('Created new session for message sending');
+          console.log('Created new session with title:', title);
         } else {
           console.log('Failed to create session, continuing without session storage');
         }
       } catch (error) {
         console.warn('Session creation failed:', error);
+        
+        // Check if this is a backend offline error
+        if (error?.message?.includes('Failed to fetch') || 
+            error?.message?.includes('ERR_NETWORK') || 
+            error?.message?.includes('backend is offline') ||
+            error?.code === 'BACKEND_OFFLINE') {
+          setBackendOnline(false);
+          handleBackendOffline();
+          return; // Don't proceed with message sending
+        }
+        
         toast.warning('Session creation failed, messages may not be saved');
       }
     }
@@ -763,6 +803,13 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
               // Ensure the response is marked complete so loading stops
               try { updateResponse(responseId, '', true); } catch (e) {}
               setResponseError(responseId, error);
+              
+              // Check if this is a backend offline error
+              if (error?.code === 'BACKEND_OFFLINE' || error?.message?.includes('Backend is currently offline')) {
+                handleBackendOffline();
+                return;
+              }
+              
               // Normalize error message access (error may be plain object or Error)
               const msg = error?.message || error?.messageText || error?.msg || (typeof error === 'string' ? error : JSON.stringify(error));
               toast.error(`Failed to get response from ${model.name}: ${msg}`);
@@ -826,6 +873,38 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
     }
   };
 
+  // Handle backend connectivity issues
+  const handleBackendOffline = async () => {
+    setBackendOnline(false);
+    setIsReconnecting(true);
+    
+    toast.error('🔌 Backend is currently offline', {
+      description: 'Attempting to reconnect...',
+      duration: 5000,
+    });
+    
+    try {
+      const reconnected = await retryBackendConnection(3, 1000);
+      if (reconnected) {
+        setBackendOnline(true);
+        toast.success('✅ Backend reconnected successfully!');
+      } else {
+        toast.error('❌ Failed to reconnect to backend', {
+          description: 'Please check if the backend server is running',
+          duration: 10000,
+        });
+      }
+    } catch (error) {
+      console.error('Reconnection error:', error);
+      toast.error('❌ Connection failed', {
+        description: 'Please manually refresh the page or restart the backend',
+        duration: 10000,
+      });
+    } finally {
+      setIsReconnecting(false);
+    }
+  };
+
   // Auto-resize textarea
   const adjustTextareaHeight = () => {
     if (textareaRef.current) {
@@ -834,39 +913,17 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
     }
   };
 
-  // Enhanced new chat with session creation and backend storage
-  const handleNewChat = async () => {
-    const title = selectedModels.length > 0 
-      ? `Chat with ${selectedModels[0].name}` 
-      : 'New Chat';
-    
+  // Start new chat - just clear UI state, don't create DB entry until first message
+  const handleNewChat = () => {
     // Clear current conversation state for fresh start
     setMessages([]);
     clearResponses();
     setInputValue('');
     setAttachedFiles([]);
     setError(null);
+    setCurrentSessionId(null); // Clear session ID so new session will be created on first message
     
-    try {
-      // Create new chat session via backend
-      const newSession = await createChatSession(null, title, null);
-      
-      if (newSession?.success && newSession.session) {
-        const session = newSession.session;
-        const sessionId = session._id || session.id;
-        
-        setCurrentSessionId(sessionId);
-        setChatSessions(prev => [session, ...prev]);
-        
-        toast.success('New chat session created');
-        console.log('Created new chat session:', sessionId);
-      } else {
-        throw new Error('Failed to create session');
-      }
-    } catch (error) {
-      console.warn('Backend session creation failed:', error);
-      toast.warning('Session creation failed, messages may not be saved');
-    }
+    console.log('Started new chat - session will be created on first message');
   };
 
   // Load chat session and messages from backend
@@ -1139,6 +1196,19 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
                   ) : (
                     <>
                       <div className="space-y-0.5 flex-1 overflow-y-auto overflow-x-hidden scrollbar-custom min-w-0">
+                      {/* Show "New Chat" placeholder when no session is active */}
+                      {!currentSessionId && (
+                        <div className="grid grid-cols-[1fr] items-center group rounded-lg transition-all shadow-sm min-w-0 bg-purple-100 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800">
+                          <div className="text-left p-2 text-xs transition-colors min-w-0 w-full">
+                            <div className="font-medium truncate min-w-0 text-xs text-purple-700 dark:text-purple-300">
+                              New Chat
+                            </div>
+                            <div className="text-purple-500 dark:text-purple-400 mt-0.5 truncate text-xs opacity-75">
+                              Start typing to create...
+                            </div>
+                          </div>
+                        </div>
+                      )}
                       {chatSessions.map((session) => (
                         <div
                           key={session._id}
@@ -1400,6 +1470,18 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
                 })()
               )}
             </div>
+
+            {/* Backend Connection Status */}
+            {!backendOnline && (
+              <div className="flex justify-center mb-4">
+                <div className="flex items-center gap-3 p-3 bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg shadow-sm">
+                  <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+                  <div className="text-sm text-red-700 dark:text-red-300">
+                    {isReconnecting ? '🔄 Reconnecting to backend...' : '❌ Backend is offline - trying to reconnect'}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Input Card */}
             <div className="flex justify-center">

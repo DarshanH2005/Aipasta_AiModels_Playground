@@ -18,3 +18,4 @@ export { default as WalletDisplay } from './components/WalletDisplay';
 export { default as CostEstimation } from './components/CostEstimation';
 export { default as PlansModal } from './components/PlansModal';
 export { default as SettingsModal } from './components/SettingsModal';
+export { default as BackendStatus } from './components/BackendStatus';

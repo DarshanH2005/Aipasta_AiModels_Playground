@@ -145,7 +145,7 @@ const UserTable = ({ users, onAddTokens }) => {
 const AdminPanelWithToast = () => {
   const { user, logout, loading: authLoading } = useAuth();
   const router = useRouter();
-  const { showToast } = useToast();
+  const { success: showSuccess, error: showError } = useToast();
   
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
@@ -212,7 +212,7 @@ const AdminPanelWithToast = () => {
       
       if (!statsResponse.ok) {
         if (statsResponse.status === 403) {
-          showToast('Access denied. Admin permissions required.', 'error');
+          showError('Access denied. Admin permissions required.');
           router.push('/chat');
           return;
         }
@@ -234,7 +234,7 @@ const AdminPanelWithToast = () => {
       
     } catch (error) {
       console.error('Error loading admin data:', error);
-      showToast('Failed to load admin data: ' + error.message, 'error');
+      showError('Failed to load admin data: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -252,7 +252,7 @@ const AdminPanelWithToast = () => {
     e.preventDefault();
     
     if (!tokenAmount || isNaN(tokenAmount) || parseFloat(tokenAmount) <= 0) {
-      showToast('Please enter a valid token amount', 'error');
+      showError('Please enter a valid token amount');
       return;
     }
 
@@ -270,7 +270,7 @@ const AdminPanelWithToast = () => {
       const data = await response.json();
 
       if (response.ok) {
-        showToast(`Successfully added ${tokenAmount} tokens to ${selectedUser.name}`, 'success');
+        showSuccess(`Successfully added ${tokenAmount} tokens to ${selectedUser.name}`);
         
         // Update the user in the local state
         setUsers(users.map(u => 
@@ -285,11 +285,11 @@ const AdminPanelWithToast = () => {
         setTokenAmount('');
         setTokenReason('');
       } else {
-        showToast(data.message || 'Failed to add tokens', 'error');
+        showError(data.message || 'Failed to add tokens');
       }
     } catch (error) {
       console.error('Error adding tokens:', error);
-      showToast('Failed to add tokens: ' + error.message, 'error');
+      showError('Failed to add tokens: ' + error.message);
     } finally {
       setTokenLoading(false);
     }

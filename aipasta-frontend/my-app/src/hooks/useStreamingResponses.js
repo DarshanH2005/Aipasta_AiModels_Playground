@@ -218,9 +218,8 @@ export const streamModelResponse = async (model, userInput, files, onChunk, onCo
           return;
         }
 
-        // Fallback: report generic error through callback
-        const e = new Error(errMsg);
-        if (onError) onError(e);
+        // Fallback: report generic error through callback as a plain object to avoid Next.js overlay
+        if (onError) onError({ code: 'GENERIC_ERROR', message: errMsg, raw: response });
         return;
       }
 
@@ -228,21 +227,9 @@ export const streamModelResponse = async (model, userInput, files, onChunk, onCo
       const aiResponse = response.data?.aiMessage?.content || 'No response generated';
       console.log('Backend API response received, content length:', aiResponse.length);
       
-      // Simulate streaming by breaking response into chunks
-      const words = aiResponse.split(' ');
-      const chunkSize = Math.max(1, Math.floor(words.length / 10));
-      
-      for (let i = 0; i < words.length; i += chunkSize) {
-        const chunk = words.slice(i, i + chunkSize).join(' ');
-        const isLastChunk = i + chunkSize >= words.length;
-        const finalChunk = isLastChunk ? chunk : chunk + ' ';
-        
-        onChunk(finalChunk, isLastChunk);
-        
-        if (!isLastChunk) {
-          await new Promise(resolve => setTimeout(resolve, 30 + Math.random() * 70));
-        }
-      }
+      // Send the complete response as a single chunk to avoid duplication issues
+      onChunk(aiResponse, true);
+      console.log('Response sent as single chunk, content:', aiResponse.substring(0, 100) + '...');
       
       onComplete(response);
       return;
@@ -261,9 +248,9 @@ export const streamModelResponse = async (model, userInput, files, onChunk, onCo
         } else if (backendError.message && backendError.message.includes('Access denied')) {
           code = 'PAYWALL';
           message = `🔒 ${backendError.message}`;
-        } else if (backendError.message && (backendError.message.includes('Network Error') || backendError.message.includes('fetch'))) {
-          code = 'NETWORK_ERROR';
-          message = '🌐 Connection error. Please check your internet and try again.';
+        } else if (backendError.message && (backendError.message.includes('Network Error') || backendError.message.includes('fetch') || backendError.message.includes('Failed to fetch') || backendError.message.includes('ERR_NETWORK') || backendError.name === 'TypeError')) {
+          code = 'BACKEND_OFFLINE';
+          message = '🔌 Backend is currently offline. Please check if the backend server is running and try again.';
         } else if (backendError.message && (backendError.message.includes('500') || backendError.message.includes('Internal Server Error'))) {
           code = 'SERVER_ERROR';
           message = '⚠️ Server error. Please try again in a moment.';
@@ -291,21 +278,8 @@ export const streamModelResponse = async (model, userInput, files, onChunk, onCo
     console.error('All response methods failed for model:', modelId);
     const errorMessage = `Sorry, I'm unable to generate a response using the ${model.name || modelId} model right now. This could be due to:\n\n• The model may be temporarily unavailable\n• Network connectivity issues\n• Backend service is down\n\nPlease try:\n• Selecting a different model\n• Refreshing the page\n• Checking your internet connection`;
     
-    // Stream the error message as if it were a normal response
-    const words = errorMessage.split(' ');
-    const chunkSize = Math.max(1, Math.floor(words.length / 8));
-    
-    for (let i = 0; i < words.length; i += chunkSize) {
-      const chunk = words.slice(i, i + chunkSize).join(' ');
-      const isLastChunk = i + chunkSize >= words.length;
-      const finalChunk = isLastChunk ? chunk : chunk + ' ';
-      
-      onChunk(finalChunk, isLastChunk);
-      
-      if (!isLastChunk) {
-        await new Promise(resolve => setTimeout(resolve, 50 + Math.random() * 50));
-      }
-    }
+    // Send the error message as a single chunk to avoid duplication
+    onChunk(errorMessage, true);
     
     onComplete({ 
       content: errorMessage, 

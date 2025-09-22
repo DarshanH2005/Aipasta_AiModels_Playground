@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { IconEye, IconEyeOff, IconUser, IconMail, IconLock, IconX } from '@tabler/icons-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useToast } from '../../../shared';
+import { checkBackendHealth } from '../../../lib/api-client';
 
 const AuthModal = ({ isOpen, onClose, initialMode = 'login' }) => {
   const [mode, setMode] = useState(initialMode); // 'login', 'register'
@@ -15,6 +16,7 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorShown, setErrorShown] = useState(false); // Prevent duplicate error toasts
+  const [backendOnline, setBackendOnline] = useState(true);
 
   const { login, register, loginWithToken } = useAuth();
   const toast = useToast();
@@ -294,10 +296,17 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }) => {
                 onClose();
               } catch (err) {
                 console.error('Google sign-in error:', err);
-                if (err.name === 'TypeError' && err.message.includes('fetch')) {
-                  toast.error('Unable to connect to server. Please check your connection and try again.');
+                
+                // Check for backend offline/connection errors
+                if (err.name === 'TypeError' && (
+                    err.message.includes('Failed to fetch') || 
+                    err.message.includes('fetch') ||
+                    err.message.includes('ERR_NETWORK') ||
+                    err.message.includes('ERR_CONNECTION_REFUSED')
+                )) {
+                  toast.error('🔴 Backend server is currently offline. Please try again later or contact support if this persists.');
                 } else {
-                  toast.error('Google sign-in failed');
+                  toast.error('Google sign-in failed: ' + (err.message || 'Unknown error'));
                 }
               }
             }
@@ -340,6 +349,26 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }) => {
     return () => { cancelled = true; };
   }, [isOpen]);
 
+  // Backend health check when modal opens
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const checkHealth = async () => {
+      try {
+        const isHealthy = await checkBackendHealth();
+        setBackendOnline(isHealthy);
+        if (!isHealthy) {
+          toast.warning('⚠️ Backend server appears to be offline. Authentication may not work properly.');
+        }
+      } catch (error) {
+        console.warn('Backend health check failed:', error);
+        setBackendOnline(false);
+      }
+    };
+
+    checkHealth();
+  }, [isOpen, toast]);
+
   const switchMode = (newMode) => {
     setMode(newMode);
     setFormData({
@@ -373,6 +402,18 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }) => {
             {mode === 'register' && 'Join AI Pasta and get 10,000 free tokens to start'}
           </p>
         </div>
+
+        {/* Backend Status Indicator */}
+        {!backendOnline && (
+          <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+              <span className="text-sm text-red-700 dark:text-red-300">
+                Server offline - authentication unavailable
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Mode Toggle */}
         <div className="flex bg-white/30 dark:bg-white/10 backdrop-blur-sm border border-white/20 dark:border-white/10 rounded-lg p-1 mb-6">

@@ -25,13 +25,35 @@ export function buildApiUrl(path) {
 const checkBackendHealth = async () => {
   try {
     const healthUrl = buildApiUrl('/health');
-    const response = await fetch(healthUrl, { method: 'GET' });
+    const response = await fetch(healthUrl, { method: 'GET', timeout: 5000 });
     console.log('Backend health check:', response.status === 200 ? 'OK' : `Failed (${response.status})`);
     return response.status === 200;
   } catch (error) {
     console.warn('Backend not available:', error?.message || error);
     return false;
   }
+};
+
+// Retry backend connection with exponential backoff
+const retryBackendConnection = async (maxRetries = 3, baseDelay = 1000) => {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    console.log(`🔄 Attempting to reconnect to backend (${attempt}/${maxRetries})...`);
+    
+    const isHealthy = await checkBackendHealth();
+    if (isHealthy) {
+      console.log('✅ Backend reconnected successfully!');
+      return true;
+    }
+    
+    if (attempt < maxRetries) {
+      const delay = baseDelay * Math.pow(2, attempt - 1); // Exponential backoff
+      console.log(`⏳ Backend still offline, retrying in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  
+  console.log('❌ Failed to reconnect to backend after all attempts');
+  return false;
 };
 
 // Run health check on load
@@ -666,3 +688,6 @@ export async function deleteChatSession(sessionId) {
     throw error;
   }
 }
+
+// Export backend health and connectivity functions
+export { checkBackendHealth, retryBackendConnection };
