@@ -992,8 +992,15 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
     };
   }, [updateBackendStatus]); // Include updateBackendStatus dependency
 
-  // Sidebar links intentionally left empty here; the Chat link was removed per request.
-  const sidebarLinks = [];
+  // Sidebar links - conditionally include admin link for admin users
+  const sidebarLinks = [
+    // Add admin link if user has admin role
+    ...(user?.role === 'admin' ? [{
+      label: 'Admin Panel',
+      href: '/admin',
+      icon: IconSettings
+    }] : [])
+  ];
 
   return (
     <>
@@ -1093,7 +1100,7 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
                     href={link.href}
                     className={`flex items-center ${!(open || locked) ? 'p-1 justify-center' : 'p-2'} rounded-lg text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700 hover:text-neutral-800 dark:hover:text-neutral-100 transition-colors`}
                   >
-                    {link.icon}
+                    <link.icon className="w-5 h-5" />
                     {(open || locked) && (
                       <span className="ml-3 text-sm font-medium whitespace-nowrap">
                         {link.label}

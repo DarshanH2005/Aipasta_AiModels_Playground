@@ -490,11 +490,75 @@ const updateModel = async (req, res, next) => {
   }
 };
 
+// @desc    Add tokens to user (admin action)
+// @route   POST /api/admin/users/:userId/tokens
+// @access  Private (Admin only)
+const addTokensToUser = async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const { amount, reason = 'Admin token addition' } = req.body;
+
+    // Validate amount
+    if (!amount || amount <= 0) {
+      return next(new AppError('Amount must be a positive number', 400));
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return next(new AppError('User not found', 404));
+    }
+
+    // Update user tokens
+    const oldBalance = user.tokens?.balance || user.credits || 0;
+    const newBalance = oldBalance + amount;
+
+    // Update tokens object (preferred)
+    if (user.tokens) {
+      user.tokens.balance = newBalance;
+      user.tokens.totalEarned = (user.tokens.totalEarned || 0) + amount;
+      user.tokens.transactions.push({
+        type: 'admin_credit',
+        amount: amount,
+        description: reason,
+        balanceAfter: newBalance,
+        timestamp: new Date(),
+        adminId: req.user._id
+      });
+    } else {
+      // Fallback to credits field for backward compatibility
+      user.credits = newBalance;
+    }
+
+    await user.save();
+
+    // Log admin action
+    console.log(`Admin ${req.user.email} added ${amount} tokens to user ${user.email}. Reason: ${reason}`);
+
+    res.status(200).json({
+      status: 'success',
+      message: `Successfully added ${amount} tokens to ${user.name}`,
+      data: {
+        user: {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          previousBalance: oldBalance,
+          newBalance: newBalance,
+          tokensAdded: amount
+        }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Routes
 router.get('/stats', getAdminStats);
 router.get('/users', validatePagination, getAllUsers);
 router.get('/users/:userId', getUserDetails);
 router.patch('/users/:userId', validateUserUpdate, updateUser);
+router.post('/users/:userId/tokens', addTokensToUser);
 router.delete('/users/:userId', deleteUser);
 router.get('/system', getSystemMetrics);
 router.patch('/models/:modelId', updateModel);
