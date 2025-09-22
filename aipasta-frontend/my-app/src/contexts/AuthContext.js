@@ -73,7 +73,8 @@ export const AuthProvider = ({ children }) => {
       // Store token
       localStorage.setItem('authToken', data.token);
       setUser(data.data.user);
-      setCredits(data.data.user.credits || 0);
+      // Check both credits and tokens.balance for backward compatibility
+      setCredits(data.data.user.credits || data.data.user.tokens?.balance || 0);
 
       return { success: true, user: data.data.user };
     } catch (error) {
@@ -138,7 +139,8 @@ export const AuthProvider = ({ children }) => {
       // Store token
       localStorage.setItem('authToken', data.token);
       setUser(data.data.user);
-      setCredits(data.data.user.credits || 0);
+      // Check both credits and tokens.balance for backward compatibility
+      setCredits(data.data.user.credits || data.data.user.tokens?.balance || 0);
 
       return { success: true, user: data.data.user };
     } catch (error) {
@@ -189,8 +191,20 @@ export const AuthProvider = ({ children }) => {
 
       if (response.ok) {
         const data = await safeParseResponse(response);
+        console.log('🔍 Full API Response Structure:', data);
+        console.log('🔍 User Object:', data.data?.user);
+        
         setUser(data.data.user);
-        setCredits(data.data.user.credits || 0);
+        // Check both credits and tokens.balance for backward compatibility
+        const userCredits = data.data.user.credits || data.data.user.tokens?.balance || 0;
+        console.log('🔍 Auth Debug - User credits/tokens:', {
+          credits: data.data.user.credits,
+          tokensBalance: data.data.user.tokens?.balance,
+          tokensObject: data.data.user.tokens,
+          finalCredits: userCredits
+        });
+        console.log('🔍 Setting frontend credits to:', userCredits);
+        setCredits(userCredits);
       } else {
         // Token might be invalid
         localStorage.removeItem('authToken');
@@ -329,6 +343,7 @@ export const AuthProvider = ({ children }) => {
     deductCredits,
     getCredits,
     updateCredits,
+    refreshUser: getCurrentUser, // Add function to manually refresh user data
     isAuthenticated: !!user
   };
 

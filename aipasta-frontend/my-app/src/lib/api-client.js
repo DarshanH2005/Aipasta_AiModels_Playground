@@ -293,15 +293,43 @@ export async function createChatSession(userId = null, title = null, modelId = n
   }
 }
 
+// Cache for getChatSessions to prevent rapid successive calls
+let chatSessionsApiCache = { data: null, timestamp: 0, promise: null };
+const CHAT_SESSIONS_CACHE_DURATION = 10000; // 10 seconds
+
+// Function to clear chat sessions cache (useful after creating/deleting sessions)
+export function clearChatSessionsCache() {
+  chatSessionsApiCache = { data: null, timestamp: 0, promise: null };
+  console.log('🗑️ Cleared chat sessions cache');
+}
+
 export async function getChatSessions() {
+  const now = Date.now();
+  
+  // Return cached data if still valid
+  if (chatSessionsApiCache.data && 
+      now - chatSessionsApiCache.timestamp < CHAT_SESSIONS_CACHE_DURATION) {
+    console.log('🚀 Returning cached chat sessions from API client');
+    return chatSessionsApiCache.data;
+  }
+  
+  // If there's already a pending request, wait for it
+  if (chatSessionsApiCache.promise) {
+    console.log('⏳ Waiting for existing chat sessions request...');
+    return await chatSessionsApiCache.promise;
+  }
+  
   try {
     const url = `${API_BASE}/api/chat/sessions`;
     console.log('Fetching chat sessions from:', url);
     
-    const response = await fetch(url, {
+    // Store the promise to prevent concurrent requests
+    chatSessionsApiCache.promise = fetch(url, {
       method: 'GET',
       headers: getAuthHeaders()
     });
+    
+    const response = await chatSessionsApiCache.promise;
 
     console.log('Chat sessions response status:', response.status);
 
@@ -327,12 +355,23 @@ export async function getChatSessions() {
       throw new Error(`Failed to load chat sessions: ${response.status} ${response.statusText}`);
     }
 
-  const data = await safeParseResponse(response);
-  console.log('Chat sessions data:', data);
-  return data.data?.sessions || data.sessions || data || [];
+    const data = await safeParseResponse(response);
+    console.log('Chat sessions data:', data);
+    
+    const sessions = data.data?.sessions || data.sessions || data || [];
+    
+    // Cache the successful result
+    chatSessionsApiCache = {
+      data: sessions,
+      timestamp: now,
+      promise: null
+    };
+    
+    return sessions;
   } catch (error) {
+    // Clear the promise on error
+    chatSessionsApiCache.promise = null;
     console.error('Error fetching chat sessions:', error);
-    // Re-throw the error for proper handling
     throw error;
   }
 }

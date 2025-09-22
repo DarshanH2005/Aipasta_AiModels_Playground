@@ -28,7 +28,7 @@ const planSchema = new mongoose.Schema({
   },
   modelType: {
     type: String,
-    enum: ['free', 'paid', 'premium'],
+    enum: ['free', 'paid', 'premium', 'enterprise', 'hybrid'],
     required: true,
     default: 'free'
   },
@@ -55,8 +55,16 @@ const planSchema = new mongoose.Schema({
     },
     allowedModelTypes: [{
       type: String,
-      enum: ['free', 'paid', 'premium']
-    }]
+      enum: ['free', 'paid', 'premium', 'enterprise', 'hybrid']
+    }],
+    maxTokensPerMonth: {
+      type: Number,
+      default: 100000
+    },
+    maxPremiumRequests: {
+      type: Number,
+      default: null // null means unlimited, number means limited
+    }
   },
   // Razorpay integration fields
   razorpayPlanId: {

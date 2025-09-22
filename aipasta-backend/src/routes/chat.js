@@ -136,11 +136,11 @@ const sendChatMessage = async (req, res, next) => {
     }
 
     const userId = req.user._id;
-    console.log('✅ User authenticated:', { userId, credits: req.user.credits });
+    console.log('✅ User authenticated:', { userId, credits: req.user.credits, tokens: req.user.tokens?.balance });
 
-    // Check if user has credits
+    // Check if user has credits/tokens
     if (!req.user.hasCredits(1)) {
-      console.log('❌ Insufficient credits:', req.user.credits);
+      console.log('❌ Insufficient tokens:', { credits: req.user.credits, tokens: req.user.tokens?.balance });
       return next(new AppError('Insufficient credits. Please upgrade your account.', 403));
     }
 
@@ -218,12 +218,26 @@ const sendChatMessage = async (req, res, next) => {
       }
     } else {
       // For direct API calls without model in DB, check model ID for "free" designation
-      if (modelId.includes(':free') || modelId.includes('free') || modelId.includes('Free')) {
+      // Enhanced detection for free models including OpenRouter free models
+      const isFreeModel = modelId.includes(':free') || 
+                         modelId.includes('free') || 
+                         modelId.includes('Free') ||
+                         modelId.includes('-free') ||
+                         modelId.includes('/free') ||
+                         modelId.endsWith(':free') ||
+                         // OpenRouter specific free model patterns
+                         modelId.includes('meta-llama/llama-3.1-405b-instruct:free') ||
+                         modelId.includes('google/gemini-flash-1.5:free') ||
+                         modelId.includes('mistralai/mistral-7b-instruct:free');
+      
+      if (isFreeModel) {
         modelType = 'free';
         tokenCost = 1;
+        console.log(`🆓 Detected free model: ${modelId}`);
       } else {
         modelType = 'paid';
         tokenCost = 10;
+        console.log(`💳 Detected paid model: ${modelId}`);
       }
     }
     
@@ -307,10 +321,11 @@ const sendChatMessage = async (req, res, next) => {
     let usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
     let cost = { usd: 0, inr: 0 };
     const startTime = Date.now();
+    
+    // Route to appropriate AI service based on provider (or default to OpenRouter for direct API)
+    const provider = model ? model.provider : 'OpenRouter';
 
     try {
-      // Route to appropriate AI service based on provider (or default to OpenRouter for direct API)
-      const provider = model ? model.provider : 'OpenRouter';
       
       if (provider === 'OpenRouter') {
         console.log('🔄 Calling OpenRouter service with:', { modelId, messagesCount: messages.length });
@@ -391,14 +406,22 @@ const sendChatMessage = async (req, res, next) => {
       return next(providerErr);
     }
 
-    // Deduct tokens based on actual usage from AI response
-    const actualTokensUsed = usage.totalTokens;
+    // Use your internal fixed token system instead of OpenRouter's actual token usage
+    // This fixes the issue where 800+ tokens were being deducted for simple "hi" responses
+    const internalTokenCost = modelType === 'free' ? 1 : 10;
+    const actualTokensUsed = internalTokenCost; // Track the actual tokens used for this request
     
-    // Check if user has enough tokens for actual usage
+    console.log(`🔍 Token Usage Debug:
+      - OpenRouter reported tokens: ${usage.totalTokens}
+      - Internal token cost (fixed): ${internalTokenCost}
+      - Model type: ${modelType}
+      - Using internal cost for deduction`);
+    
+    // Check if user has enough tokens for internal cost
     const currentUser = await require('../models/User').findById(userId);
-    if (currentUser.tokens.balance < actualTokensUsed) {
+    if (currentUser.tokens.balance < internalTokenCost) {
       // Still save the AI response but warn about token shortage
-      console.warn(`⚠️ Token shortage: Request used ${actualTokensUsed} tokens, user has ${currentUser.tokens.balance} tokens`);
+      console.warn(`⚠️ Token shortage: Request needs ${internalTokenCost} tokens, user has ${currentUser.tokens.balance} tokens`);
       
       // Deduct whatever tokens they have left and set balance to 0
       if (currentUser.tokens.balance > 0) {
@@ -410,9 +433,9 @@ const sendChatMessage = async (req, res, next) => {
       // Continue with response but include warning
       console.log(`⚠️ User ${userId} has insufficient tokens but response will be delivered`);
     } else {
-      // Deduct the actual tokens used (normal case)
-  const res = await currentUser.deductTokens(actualTokensUsed, modelType);
-  console.log(`💰 Deducted ${res.deducted || actualTokensUsed} actual tokens from user ${userId}. Remaining: ${res.balance}`);
+      // Deduct the internal fixed token cost (corrected logic)
+      const res = await currentUser.deductTokens(internalTokenCost, modelType);
+      console.log(`💰 Deducted ${res.deducted || internalTokenCost} internal tokens from user ${userId}. Remaining: ${res.balance}`);
     }
 
     // Refresh req.user to reflect the latest token and credits balance
@@ -446,7 +469,7 @@ const sendChatMessage = async (req, res, next) => {
         outputTokens: usage.completionTokens,
         totalTokens: usage.totalTokens
       },
-      tokensDeducted: actualTokensUsed, // Store actual tokens deducted based on AI response
+      tokensDeducted: internalTokenCost, // Store internal fixed tokens deducted (1 for free, 10 for paid)
       modelType: modelType, // Store model type for analytics
       responseTime: Date.now() - startTime,
       status: 'completed',
@@ -491,10 +514,10 @@ const sendChatMessage = async (req, res, next) => {
       // Don't fail the request if stats update fails
     }
 
-    // Deduct credits after successful AI response
+    // Deduct tokens after successful AI response
     try {
-      const remainingCredits = await req.user.deductCredits(1);
-      console.log(`User ${req.user._id} credits deducted. Remaining: ${remainingCredits}`);
+      const deductResult = await req.user.deductTokens(1);
+      console.log(`User ${req.user._id} tokens deducted. Remaining: ${deductResult.balance}`);
     } catch (creditsError) {
       console.error('Credits deduction error:', creditsError.message);
       // Don't fail the request if credits deduction fails (edge case)

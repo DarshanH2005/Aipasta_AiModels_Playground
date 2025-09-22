@@ -64,7 +64,7 @@ const OptimizedMultiResponseContainer = memo(({
   return (
     <div className="space-y-3">
       {/* Layout Toggle & Stats */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between pl-2">
         <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
           <span>{memoizedResponses.length} response{memoizedResponses.length !== 1 ? 's' : ''}</span>
           {isLoading && (

@@ -301,11 +301,11 @@ const SettingsModal = ({ isOpen, onClose, onUpgradeClick }) => {
                 </div>
               </div>
             </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+          </div> {/* Grid container */}
+          </div> {/* Scrollable Content */}
+        </div> {/* Modal panel */}
+      </div> {/* Relative positioning */}
+    </div> {/* Fixed backdrop */}
   );
 };
 

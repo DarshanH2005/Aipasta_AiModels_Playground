@@ -60,6 +60,10 @@ const WalletDisplay = ({ walletState, onWalletUpdate, onUpgradeClick }) => {
         return <IconArrowUp className="w-3 h-3 text-green-500" />;
       case 'refund':
         return <IconRefresh className="w-3 h-3 text-blue-500" />;
+      case 'admin_credit':
+      case 'admin_credit_free':
+      case 'admin_credit_paid':
+        return <IconArrowUp className="w-3 h-3 text-purple-500" />;
       default:
         return <IconWallet className="w-3 h-3 text-neutral-500" />;
     }
@@ -140,35 +144,91 @@ const WalletDisplay = ({ walletState, onWalletUpdate, onUpgradeClick }) => {
         </button>
       </div>
 
-      {/* Balance */}
+      {/* Balance - Enhanced with token breakdown */}
       <div className="text-center py-2">
-      <div className={`text-2xl font-bold ${getBalanceColor(ws.tokens)}`}>
-        {formatTokens(ws.tokens)}
+        <div className={`text-2xl font-bold ${getBalanceColor(ws.tokens)}`}>
+          {formatTokens(ws.tokens)}
         </div>
         <div className="text-xs text-neutral-500 dark:text-neutral-400">
-          Available Tokens
+          Total Available Tokens
+        </div>
+        
+        {/* Token Type Breakdown */}
+        {(ws.freeTokens !== undefined || ws.paidTokens !== undefined) && (
+          <div className="flex justify-center gap-4 mt-2">
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              <span className="text-xs text-neutral-600 dark:text-neutral-400">
+                Free: {formatTokens(ws.freeTokens || 0)}
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+              <span className="text-xs text-neutral-600 dark:text-neutral-400">
+                Paid: {formatTokens(ws.paidTokens || 0)}
+              </span>
+            </div>
+          </div>
+        )}
+        
+        {/* Premium Status Indicator */}
+        {ws.currentPlan && ws.currentPlan !== null && (
+          <div className="mt-2 inline-flex items-center gap-1 px-2 py-1 bg-gradient-to-r from-purple-100 to-blue-100 dark:from-purple-900/20 dark:to-blue-900/20 rounded-full">
+            <span className="text-xs font-medium text-purple-700 dark:text-purple-300">✨ Premium</span>
+          </div>
+        )}
+      </div>
+
+      {/* Enhanced Stats with Token Usage Breakdown */}
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="text-center p-2 bg-neutral-50 dark:bg-neutral-700 rounded">
+          <div className="font-medium text-neutral-900 dark:text-neutral-100">
+            {formatTokens(ws.totalTokensSpent || ws.totalUsed || 0)}
+          </div>
+          <div className="text-xs text-neutral-500 dark:text-neutral-400">
+            Tokens Used
+          </div>
+        </div>
+        <div className="text-center p-2 bg-neutral-50 dark:bg-neutral-700 rounded">
+          <div className="font-medium text-neutral-900 dark:text-neutral-100">
+            {ws.totalRequests || 0}
+          </div>
+          <div className="text-xs text-neutral-500 dark:text-neutral-400">
+            Total Requests
+          </div>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-3 text-sm">
-        <div className="text-center p-2 bg-neutral-50 dark:bg-neutral-700 rounded">
-            <div className="font-medium text-neutral-900 dark:text-neutral-100">
-                {formatTokens(ws.totalTokensSpent)}
-              </div>
-          <div className="text-xs text-neutral-500 dark:text-neutral-400">
-            Total Spent
+      {/* Additional Stats for Premium Users */}
+      {ws.currentPlan && ws.currentPlan !== null && (
+        <div className="grid grid-cols-2 gap-3 text-sm mt-2">
+          <div className="text-center p-2 bg-purple-50 dark:bg-purple-900/20 rounded border border-purple-200 dark:border-purple-700">
+            <div className="font-medium text-purple-600 dark:text-purple-400">
+              ${(ws.totalCost || 0).toFixed(2)}
+            </div>
+            <div className="text-xs text-purple-500 dark:text-purple-400">
+              Total Cost
+            </div>
+          </div>
+          <div className="text-center p-2 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-700">
+            <div className="font-medium text-blue-600 dark:text-blue-400">
+              {ws.premiumRequests || 0}
+            </div>
+            <div className="text-xs text-blue-500 dark:text-blue-400">
+              Premium Calls
+            </div>
           </div>
         </div>
-        <div className="text-center p-2 bg-neutral-50 dark:bg-neutral-700 rounded">
-            <div className="font-medium text-neutral-900 dark:text-neutral-100">
-            {ws.totalRequests}
-          </div>
-          <div className="text-xs text-neutral-500 dark:text-neutral-400">
-            Requests
+      )}
+
+      {/* Usage Efficiency Indicator */}
+      {ws.totalRequests > 0 && (
+        <div className="mt-2 p-2 bg-gray-50 dark:bg-gray-700/50 rounded text-center">
+          <div className="text-xs text-gray-600 dark:text-gray-400">
+            Avg tokens per request: {Math.round((ws.totalTokensSpent || ws.totalUsed || 0) / ws.totalRequests)}
           </div>
         </div>
-      </div>
+      )}
 
       {/* Top Up Section */}
       {/* Replace direct top-up controls with an Upgrade Plans CTA */}
@@ -218,6 +278,8 @@ const WalletDisplay = ({ walletState, onWalletUpdate, onUpgradeClick }) => {
               <div className={`font-medium ${
                   transaction.type === 'deduct' 
                     ? 'text-red-600 dark:text-red-400' 
+                    : transaction.type.includes('admin_credit')
+                    ? 'text-purple-600 dark:text-purple-400'
                     : 'text-green-600 dark:text-green-400'
                 }`}>
                   {transaction.type === 'deduct' ? '-' : '+'}

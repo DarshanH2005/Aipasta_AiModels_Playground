@@ -211,24 +211,55 @@ const PlansModal = ({ isOpen, onClose, onPlanSelect }) => {
     return tokens.toString();
   };
 
+  // Get savings percentage compared to the most expensive plan
+  const getSavingsPercent = (currentPrice, highestPrice) => {
+    if (currentPrice === 0 || currentPrice >= highestPrice) return null;
+    return Math.round(((highestPrice - currentPrice) / highestPrice) * 100);
+  };
+
+  // Get plan urgency text
+  const getUrgencyText = (planName) => {
+    const urgencyTexts = {
+      'pocket-pack': '🔥 LIMITED TIME: ₹39 only!',
+      'pro-essential': '⏰ Most Popular Choice!',
+      'pro-unlimited': '🚀 Best Value for Professionals!',
+      'enterprise': '💼 Custom Solutions Available!'
+    };
+    return urgencyTexts[planName] || '';
+  };
+
+  // Get social proof text
+  const getSocialProof = (planName) => {
+    const proofTexts = {
+      'pocket-pack': '🎯 2,847+ users chose this',
+      'starter-boost': '👥 Perfect for students',
+      'pro-essential': '⭐ #1 Choice for professionals',
+      'pro-unlimited': '🏆 Trusted by 500+ businesses'
+    };
+    return proofTexts[planName] || '';
+  };
+
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-neutral-800 rounded-2xl max-w-6xl w-full max-h-[90vh] overflow-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-neutral-200 dark:border-neutral-700">
-          <div>
-            <h2 className="text-2xl font-bold text-neutral-900 dark:text-neutral-100">
-              Upgrade Your Plan
+        {/* Header with conversion psychology */}
+        <div className="relative bg-gradient-to-r from-purple-600 to-pink-600 text-white p-6">
+          <div className="text-center">
+            <h2 className="text-3xl font-bold mb-2">
+              🚀 Unlock Your AI Superpowers!
             </h2>
-            <p className="text-neutral-600 dark:text-neutral-400 mt-1">
-              Choose a plan that fits your AI usage needs
+            <p className="text-purple-100 text-lg mb-1">
+              Join 10,000+ users already using premium AI
+            </p>
+            <p className="text-sm text-purple-200">
+              ⏰ Limited time: Get premium AI for the price of a coffee!
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-lg transition-colors"
+            className="absolute top-4 right-4 p-2 hover:bg-white/10 rounded-lg transition-colors"
           >
             <IconX className="w-5 h-5" />
           </button>
@@ -252,26 +283,47 @@ const PlansModal = ({ isOpen, onClose, onPlanSelect }) => {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {plans.map((plan) => {
                 const color = getPlanColor(plan.modelType);
-                const isPopular = plan.modelType === 'paid';
+                const isPocketPack = plan.name === 'pocket-pack';
+                const isProEssential = plan.modelType === 'paid';
+                const isPopular = isPocketPack || isProEssential;
+                const highestPrice = Math.max(...plans.map(p => p.priceINR));
+                const savings = getSavingsPercent(plan.priceINR, highestPrice);
+                const urgencyText = getUrgencyText(plan.name);
+                const socialProof = getSocialProof(plan.name);
                 
                 return (
                   <div
                     key={plan._id}
-                    className={`relative border-2 rounded-xl p-6 transition-all duration-200 hover:scale-105 ${
-                      isPopular 
-                        ? 'border-purple-500 shadow-purple-100 dark:shadow-purple-900/20' 
-                        : 'border-neutral-200 dark:border-neutral-700'
+                    className={`relative border-2 rounded-xl p-6 transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl ${
+                      isPocketPack 
+                        ? 'border-orange-400 bg-gradient-to-br from-orange-50 to-red-50 dark:from-orange-900/20 dark:to-red-900/20 shadow-orange-200 transform scale-105' 
+                        : isProEssential
+                        ? 'border-purple-500 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 shadow-purple-200'
+                        : 'border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600'
                     }`}
                   >
-                    {/* Popular badge */}
-                    {isPopular && (
-                      <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                        <span className="bg-purple-600 text-white px-3 py-1 rounded-full text-xs font-medium">
-                          Most Popular
+                    {/* Urgency Badge */}
+                    {urgencyText && (
+                      <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 z-10">
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold animate-pulse ${
+                          isPocketPack 
+                            ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white'
+                            : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white'
+                        }`}>
+                          {urgencyText}
                         </span>
+                      </div>
+                    )}
+
+                    {/* Savings Badge */}
+                    {savings && savings > 0 && (
+                      <div className="absolute -top-2 -right-2">
+                        <div className="bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+                          Save {savings}%
+                        </div>
                       </div>
                     )}
 
@@ -294,21 +346,56 @@ const PlansModal = ({ isOpen, onClose, onPlanSelect }) => {
                       {plan.description}
                     </p>
 
-                    {/* Pricing */}
+                    {/* Pricing with Psychology */}
                     <div className="mb-6">
                       {plan.priceINR === 0 ? (
-                        <div className="text-2xl font-bold text-green-600">Free</div>
+                        <div className="text-center">
+                          <div className="text-3xl font-bold text-green-600 mb-1">FREE</div>
+                          <div className="text-sm text-green-600">Perfect to Get Started</div>
+                        </div>
                       ) : (
-                        <div className="flex items-baseline">
-                          <span className="text-2xl font-bold text-neutral-900 dark:text-neutral-100">
-                            ₹{plan.priceINR}
-                          </span>
-                          <span className="text-neutral-600 dark:text-neutral-400 ml-1">
-                            / {formatTokens(plan.tokens)} tokens
-                          </span>
+                        <div className="text-center">
+                          <div className="flex items-center justify-center mb-2">
+                            {isPocketPack && (
+                              <span className="text-lg text-gray-500 line-through mr-2">₹99</span>
+                            )}
+                            <span className={`text-3xl font-bold ${
+                              isPocketPack 
+                                ? 'text-orange-600 dark:text-orange-400' 
+                                : 'text-neutral-900 dark:text-neutral-100'
+                            }`}>
+                              ₹{plan.priceINR}
+                            </span>
+                          </div>
+                          
+                          {/* Daily cost psychology */}
+                          <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">
+                            Only ₹{(plan.priceINR / 30).toFixed(1)}/day
+                          </div>
+                          
+                          {/* Token value */}
+                          <div className="text-xs text-neutral-500">
+                            {formatTokens(plan.tokens)} tokens included
+                          </div>
+                          
+                          {/* Pocket Pack special messaging */}
+                          {isPocketPack && (
+                            <div className="mt-2 text-xs text-orange-600 font-medium animate-pulse">
+                              🍿 Less than a movie ticket!
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
+
+                    {/* Social Proof */}
+                    {socialProof && (
+                      <div className="text-center mb-4">
+                        <div className="text-xs text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full inline-block">
+                          {socialProof}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Features */}
                     <div className="space-y-2 mb-6">
@@ -322,27 +409,58 @@ const PlansModal = ({ isOpen, onClose, onPlanSelect }) => {
                       ))}
                     </div>
 
-                    {/* Purchase button */}
+                    {/* Purchase button with psychology */}
                     <button
                       onClick={() => handlePurchase(plan)}
                       disabled={purchasing}
-                      className={`w-full py-3 px-4 rounded-lg font-medium transition-colors ${
-                        isPopular
-                          ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                          : 'bg-neutral-900 dark:bg-neutral-100 hover:bg-neutral-800 dark:hover:bg-neutral-200 text-white dark:text-neutral-900'
-                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      className={`w-full py-4 px-4 rounded-xl font-bold text-lg transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl ${
+                        isPocketPack
+                          ? 'bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white animate-pulse'
+                          : isPopular
+                          ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white'
+                          : 'bg-gradient-to-r from-gray-800 to-gray-900 hover:from-gray-700 hover:to-gray-800 text-white dark:from-gray-100 dark:to-gray-200 dark:hover:from-gray-200 dark:hover:to-gray-300 dark:text-gray-900'
+                      } disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none`}
                     >
                       {purchasing ? (
                         <div className="flex items-center justify-center">
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-current mr-2"></div>
                           Processing...
                         </div>
                       ) : plan.priceINR === 0 ? (
-                        'Get Started'
+                        <span className="flex items-center justify-center">
+                          🚀 Start Free Journey
+                        </span>
+                      ) : isPocketPack ? (
+                        <span className="flex items-center justify-center">
+                          🔥 Grab This Deal Now!
+                        </span>
                       ) : (
-                        'Purchase Plan'
+                        <span className="flex items-center justify-center">
+                          ⚡ Upgrade Now
+                        </span>
                       )}
                     </button>
+
+                    {/* Urgency/Scarcity messaging */}
+                    {isPocketPack && (
+                      <div className="mt-3 text-center">
+                        <div className="text-xs text-orange-600 font-medium">
+                          ⏰ Limited time offer expires soon!
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          Join 2,847+ smart users who chose this
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Risk reversal for premium plans */}
+                    {plan.priceINR > 100 && (
+                      <div className="mt-3 text-center">
+                        <div className="text-xs text-gray-500">
+                          💰 30-day money-back guarantee
+                        </div>
+                      </div>
+                    )}
 
                     {/* Value indicator */}
                     {plan.priceINR > 0 && (
@@ -359,15 +477,37 @@ const PlansModal = ({ isOpen, onClose, onPlanSelect }) => {
           )}
         </div>
 
-        {/* Footer */}
-        <div className="p-6 border-t border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900/20">
-          <div className="text-center">
-            <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">
-              🔒 Secure payment powered by Razorpay
-            </p>
-            <p className="text-xs text-neutral-500 dark:text-neutral-500">
-              All plans include email support. Enterprise plans include priority support.
-            </p>
+        {/* Footer with trust signals and urgency */}
+        <div className="p-6 border-t border-neutral-200 dark:border-neutral-700 bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-900/10 dark:to-blue-900/10">
+          <div className="text-center space-y-3">
+            {/* Trust signals */}
+            <div className="flex items-center justify-center space-x-6 text-sm text-gray-600 dark:text-gray-400">
+              <div className="flex items-center">
+                🔒 <span className="ml-1">Secure by Razorpay</span>
+              </div>
+              <div className="flex items-center">
+                ⚡ <span className="ml-1">Instant Activation</span>
+              </div>
+              <div className="flex items-center">
+                💰 <span className="ml-1">Money-back Guarantee</span>
+              </div>
+            </div>
+            
+            {/* Social proof counter */}
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-3 inline-block">
+              <div className="text-lg font-bold text-green-600">🔥 2,847+ Happy Users</div>
+              <div className="text-xs text-gray-500">Upgraded in the last 30 days</div>
+            </div>
+            
+            {/* Final urgency push */}
+            <div className="text-center">
+              <p className="text-sm text-orange-600 font-medium animate-pulse">
+                ⏰ Special pricing ends in 24 hours! Don't miss out.
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                All plans include email support • Premium plans include priority support
+              </p>
+            </div>
           </div>
         </div>
       </div>

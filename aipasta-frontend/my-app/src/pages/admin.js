@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
+import dynamic from 'next/dynamic';
 import { useAuth } from '../contexts/AuthContext';
 import { ToastProvider, useToast } from '../shared';
-import { IconUsers, IconCurrency, IconBrain, IconChartBar, IconSettings, IconLogout, IconEye, IconTrash, IconEdit, IconShield, IconDashboard, IconCoins, IconX } from '@tabler/icons-react';
+import { IconUsers, IconCurrency, IconBrain, IconChartBar, IconSettings, IconLogout, IconEye, IconTrash, IconEdit, IconShield, IconDashboard, IconCoins, IconX, IconCrown } from '@tabler/icons-react';
 
 // StatCard Component
 const StatCard = ({ title, value, icon: Icon, color }) => {
@@ -38,7 +39,7 @@ const StatCard = ({ title, value, icon: Icon, color }) => {
 };
 
 // UserTable Component
-const UserTable = ({ users, onAddTokens }) => {
+const UserTable = ({ users, onAddTokens, onChangePlan }) => {
   return (
     <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
       <table className="min-w-full divide-y divide-gray-300 dark:divide-gray-600">
@@ -49,6 +50,9 @@ const UserTable = ({ users, onAddTokens }) => {
             </th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
               Role
+            </th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+              Plan
             </th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
               Tokens
@@ -92,6 +96,15 @@ const UserTable = ({ users, onAddTokens }) => {
                   {user.role}
                 </span>
               </td>
+              <td className="px-6 py-4 whitespace-nowrap">
+                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                  user.currentPlan 
+                    ? 'bg-purple-100 text-purple-800 dark:bg-purple-800 dark:text-purple-100' 
+                    : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100'
+                }`}>
+                  {user.currentPlan ? 'Premium' : 'Free'}
+                </span>
+              </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
                 {user.tokens?.balance || user.credits || 0}
               </td>
@@ -118,6 +131,13 @@ const UserTable = ({ users, onAddTokens }) => {
                     onClick={() => onAddTokens(user)}
                   >
                     <IconCoins className="w-4 h-4" />
+                  </button>
+                  <button 
+                    className="text-purple-600 hover:text-purple-900 dark:text-purple-400 dark:hover:text-purple-300"
+                    title="Change Plan"
+                    onClick={() => onChangePlan(user)}
+                  >
+                    <IconCrown className="w-4 h-4" />
                   </button>
                   <button 
                     className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
@@ -147,6 +167,7 @@ const AdminPanelWithToast = () => {
   const router = useRouter();
   const { success: showSuccess, error: showError } = useToast();
   
+  const [isClient, setIsClient] = useState(false);
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -157,9 +178,21 @@ const AdminPanelWithToast = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [tokenAmount, setTokenAmount] = useState('');
   const [tokenReason, setTokenReason] = useState('');
+  const [tokenType, setTokenType] = useState('free'); // 'free' or 'paid'
   const [tokenLoading, setTokenLoading] = useState(false);
 
+  // Plan management state
+  const [planModalOpen, setPlanModalOpen] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState('');
+  const [planLoading, setPlanLoading] = useState(false);
+  const [availablePlans, setAvailablePlans] = useState([]);
+
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+
+  // Ensure we're on the client side
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   // Check if user is admin
   useEffect(() => {
@@ -191,17 +224,17 @@ const AdminPanelWithToast = () => {
 
     console.log('User is admin, loading admin data');
     loadAdminData();
-  }, [user, authLoading]);
+  }, [user, authLoading, loadAdminData, router]);
 
   const getAuthHeaders = () => {
-    const token = localStorage.getItem('authToken');
+    const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
     return {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`
     };
   };
 
-  const loadAdminData = async () => {
+  const loadAdminData = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -231,6 +264,16 @@ const AdminPanelWithToast = () => {
         const usersData = await usersResponse.json();
         setUsers(usersData.data.users || []);
       }
+
+      // Load available plans
+      const plansResponse = await fetch(`${API_BASE}/api/admin/plans`, {
+        headers: getAuthHeaders()
+      });
+      
+      if (plansResponse.ok) {
+        const plansData = await plansResponse.json();
+        setAvailablePlans(plansData.data?.plans || []);
+      }
       
     } catch (error) {
       console.error('Error loading admin data:', error);
@@ -238,13 +281,14 @@ const AdminPanelWithToast = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [router, showError, API_BASE]);
 
   // Token management functions
   const handleAddTokens = (user) => {
     setSelectedUser(user);
     setTokenAmount('');
     setTokenReason('Admin token addition');
+    setTokenType('free'); // Default to free tokens
     setTokenModalOpen(true);
   };
 
@@ -263,19 +307,24 @@ const AdminPanelWithToast = () => {
         headers: getAuthHeaders(),
         body: JSON.stringify({
           amount: parseFloat(tokenAmount),
-          reason: tokenReason || 'Admin token addition'
+          reason: tokenReason || 'Admin token addition',
+          tokenType: tokenType // 'free' or 'paid'
         })
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        showSuccess(`Successfully added ${tokenAmount} tokens to ${selectedUser.name}`);
+        showSuccess(`Successfully added ${tokenAmount} ${tokenType} tokens to ${selectedUser.name}`);
         
-        // Update the user in the local state
+        // Update the user in the local state with new token structure
         setUsers(users.map(u => 
           u._id === selectedUser._id 
-            ? { ...u, tokens: { ...u.tokens, balance: data.data.user.newBalance }, credits: data.data.user.newBalance }
+            ? { 
+                ...u, 
+                tokens: data.data.user.tokens,
+                credits: data.data.user.newBalance 
+              }
             : u
         ));
         
@@ -284,6 +333,7 @@ const AdminPanelWithToast = () => {
         setSelectedUser(null);
         setTokenAmount('');
         setTokenReason('');
+        setTokenType('free');
       } else {
         showError(data.message || 'Failed to add tokens');
       }
@@ -300,10 +350,65 @@ const AdminPanelWithToast = () => {
     setSelectedUser(null);
     setTokenAmount('');
     setTokenReason('');
+    setTokenType('free');
+  };
+
+  // Plan management functions
+  const handleChangePlan = (user) => {
+    setSelectedUser(user);
+    setSelectedPlan(user.currentPlan || ''); // Set current plan or empty for free
+    setPlanModalOpen(true);
+  };
+
+  const handlePlanSubmit = async (e) => {
+    e.preventDefault();
+    
+    setPlanLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/users/${selectedUser._id}/plan`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          planId: selectedPlan || null // null for free plan
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        const planName = selectedPlan ? availablePlans.find(p => p._id === selectedPlan)?.displayName || 'Premium' : 'Free';
+        showSuccess(`Successfully changed ${selectedUser.name}'s plan to ${planName}`);
+        
+        // Update the user in the local state
+        setUsers(users.map(u => 
+          u._id === selectedUser._id 
+            ? { ...u, currentPlan: selectedPlan || null }
+            : u
+        ));
+        
+        // Close modal and reset form
+        setPlanModalOpen(false);
+        setSelectedUser(null);
+        setSelectedPlan('');
+      } else {
+        showError(data.message || 'Failed to change plan');
+      }
+    } catch (error) {
+      console.error('Error changing plan:', error);
+      showError('Failed to change plan: ' + error.message);
+    } finally {
+      setPlanLoading(false);
+    }
+  };
+
+  const handleClosePlanModal = () => {
+    setPlanModalOpen(false);
+    setSelectedUser(null);
+    setSelectedPlan('');
   };
 
   // Show loading screen while auth is being checked
-  if (authLoading) {
+  if (authLoading || !isClient) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
         <div className="text-center">
@@ -444,7 +549,7 @@ const AdminPanelWithToast = () => {
                     <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
                       User Management
                     </h3>
-                    <UserTable users={users} onAddTokens={handleAddTokens} />
+                    <UserTable users={users} onAddTokens={handleAddTokens} onChangePlan={handleChangePlan} />
                   </div>
                 </div>
               )}
@@ -492,8 +597,16 @@ const AdminPanelWithToast = () => {
                     <span className="font-medium">Email:</span> {selectedUser?.email}
                   </p>
                   <p className="text-sm text-gray-600 dark:text-gray-400">
-                    <span className="font-medium">Current Balance:</span> {selectedUser?.tokens?.balance || selectedUser?.credits || 0} tokens
+                    <span className="font-medium">Total Balance:</span> {selectedUser?.tokens?.balance || selectedUser?.credits || 0} tokens
                   </p>
+                  <div className="flex space-x-4 mt-1">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Free: {selectedUser?.tokens?.freeTokens || 0}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Paid: {selectedUser?.tokens?.paidTokens || 0}
+                    </p>
+                  </div>
                 </div>
               </div>
 
@@ -512,6 +625,42 @@ const AdminPanelWithToast = () => {
                   step="1"
                   required
                 />
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Token Type *
+                </label>
+                <div className="flex space-x-4">
+                  <label className="inline-flex items-center">
+                    <input
+                      type="radio"
+                      name="tokenType"
+                      value="free"
+                      checked={tokenType === 'free'}
+                      onChange={(e) => setTokenType(e.target.value)}
+                      className="form-radio h-4 w-4 text-blue-600 transition duration-150 ease-in-out"
+                    />
+                    <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                      Free Tokens
+                      <span className="block text-xs text-gray-500">Added to user&apos;s free token balance</span>
+                    </span>
+                  </label>
+                  <label className="inline-flex items-center">
+                    <input
+                      type="radio"
+                      name="tokenType"
+                      value="paid"
+                      checked={tokenType === 'paid'}
+                      onChange={(e) => setTokenType(e.target.value)}
+                      className="form-radio h-4 w-4 text-blue-600 transition duration-150 ease-in-out"
+                    />
+                    <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                      Paid Tokens
+                      <span className="block text-xs text-gray-500">Added to user&apos;s paid token balance</span>
+                    </span>
+                  </label>
+                </div>
               </div>
 
               <div className="mb-6">
@@ -556,6 +705,90 @@ const AdminPanelWithToast = () => {
           </div>
         </div>
       )}
+
+      {/* Plan Change Modal */}
+      {planModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-600">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Change Plan for {selectedUser?.name}
+              </h3>
+              <button
+                onClick={handleClosePlanModal}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <IconX className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handlePlanSubmit}>
+              <div className="p-4">
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    User Information
+                  </label>
+                  <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <span className="font-medium">Email:</span> {selectedUser?.email}
+                    </p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <span className="font-medium">Current Plan:</span> {selectedUser?.currentPlan ? 'Premium' : 'Free'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mb-4">
+                  <label htmlFor="planSelect" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Select New Plan *
+                  </label>
+                  <select
+                    id="planSelect"
+                    value={selectedPlan}
+                    onChange={(e) => setSelectedPlan(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                    required
+                  >
+                    <option value="">Free Plan</option>
+                    {availablePlans.map(plan => (
+                      <option key={plan._id} value={plan._id}>
+                        {plan.displayName} - ₹{plan.priceINR} ({plan.tokens} tokens)
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Select &quot;Free Plan&quot; to downgrade user to free tier
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 p-4 border-t border-gray-200 dark:border-gray-600">
+                <button
+                  type="button"
+                  onClick={handleClosePlanModal}
+                  className="px-4 py-2 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={planLoading}
+                >
+                  {planLoading ? (
+                    <div className="flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Changing...
+                    </div>
+                  ) : (
+                    'Change Plan'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 };
@@ -567,4 +800,15 @@ const AdminPage = () => (
   </ToastProvider>
 );
 
-export default AdminPage;
+// Disable SSR for admin page to prevent server-side rendering issues
+export default dynamic(() => Promise.resolve(AdminPage), {
+  ssr: false,
+  loading: () => (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+        <p className="mt-4 text-gray-600 dark:text-gray-300">Loading Admin Panel...</p>
+      </div>
+    </div>
+  )
+});

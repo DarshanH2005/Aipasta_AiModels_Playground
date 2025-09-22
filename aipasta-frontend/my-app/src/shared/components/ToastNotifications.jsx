@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { IconX, IconCheck, IconExclamationCircle, IconInfoCircle, IconAlertTriangle } from '@tabler/icons-react';
 
 // Toast context and provider
@@ -68,72 +69,165 @@ export const ToastProvider = ({ children }) => {
   );
 };
 
-// Individual toast component
+// Enhanced toast component with premium animations
 const Toast = ({ toast, onRemove }) => {
+  const [progress, setProgress] = useState(100);
+
+  useEffect(() => {
+    if (toast.duration > 0) {
+      const startTime = Date.now();
+      const interval = setInterval(() => {
+        const elapsed = Date.now() - startTime;
+        const remaining = Math.max(0, 100 - (elapsed / toast.duration) * 100);
+        setProgress(remaining);
+        
+        if (remaining === 0) {
+          clearInterval(interval);
+        }
+      }, 16); // 60fps updates
+
+      return () => clearInterval(interval);
+    }
+  }, [toast.duration]);
+
   const getIcon = () => {
+    const iconProps = "w-5 h-5 flex-shrink-0";
     switch (toast.type) {
       case 'success':
-        return <IconCheck className="w-5 h-5 text-green-500 flex-shrink-0" />;
+        return (
+          <motion.div
+            initial={{ scale: 0, rotate: -180 }}
+            animate={{ scale: 1, rotate: 0 }}
+            transition={{ type: "spring", stiffness: 200 }}
+          >
+            <IconCheck className={`${iconProps} text-green-500`} />
+          </motion.div>
+        );
       case 'error':
-        return <IconExclamationCircle className="w-5 h-5 text-red-500 flex-shrink-0" />;
+        return (
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: "spring", stiffness: 200 }}
+          >
+            <IconExclamationCircle className={`${iconProps} text-red-500`} />
+          </motion.div>
+        );
       case 'warning':
-        return <IconAlertTriangle className="w-5 h-5 text-yellow-500 flex-shrink-0" />;
+        return (
+          <motion.div
+            initial={{ scale: 0, rotate: 45 }}
+            animate={{ scale: 1, rotate: 0 }}
+            transition={{ type: "spring", stiffness: 200 }}
+          >
+            <IconAlertTriangle className={`${iconProps} text-yellow-500`} />
+          </motion.div>
+        );
       default:
-        return <IconInfoCircle className="w-5 h-5 text-blue-500 flex-shrink-0" />;
+        return (
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: "spring", stiffness: 200 }}
+          >
+            <IconInfoCircle className={`${iconProps} text-blue-500`} />
+          </motion.div>
+        );
     }
   };
 
   const getStyles = () => {
     switch (toast.type) {
       case 'success':
-        return 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-800 dark:text-green-200';
+        return 'bg-green-50/90 dark:bg-green-900/30 border-green-200/50 dark:border-green-800/50 text-green-800 dark:text-green-200';
       case 'error':
-        return 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-800 dark:text-red-200';
+        return 'bg-red-50/90 dark:bg-red-900/30 border-red-200/50 dark:border-red-800/50 text-red-800 dark:text-red-200';
       case 'warning':
-        return 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-800 dark:text-yellow-200';
+        return 'bg-yellow-50/90 dark:bg-yellow-900/30 border-yellow-200/50 dark:border-yellow-800/50 text-yellow-800 dark:text-yellow-200';
       default:
-        return 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200';
+        return 'bg-blue-50/90 dark:bg-blue-900/30 border-blue-200/50 dark:border-blue-800/50 text-blue-800 dark:text-blue-200';
+    }
+  };
+
+  const getProgressColor = () => {
+    switch (toast.type) {
+      case 'success':
+        return 'bg-green-500';
+      case 'error':
+        return 'bg-red-500';
+      case 'warning':
+        return 'bg-yellow-500';
+      default:
+        return 'bg-blue-500';
     }
   };
 
   return (
-    <div className={`
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 50, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -50, scale: 0.95 }}
+      transition={{ duration: 0.3, ease: "easeOut" }}
+      className={`
       ${getStyles()}
-      border rounded-lg p-4 shadow-lg backdrop-blur-sm
-      animate-in slide-in-from-right duration-300 ease-out
-      max-w-sm w-full mx-auto
+      border rounded-2xl p-4 shadow-2xl backdrop-blur-xl
+      max-w-sm w-full mx-auto relative overflow-hidden
+      hover:shadow-3xl transition-shadow duration-300
     `}>
+      {/* Progress bar */}
+      {toast.duration > 0 && (
+        <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/10 dark:bg-white/10">
+          <motion.div
+            className={`h-full ${getProgressColor()}`}
+            initial={{ width: "100%" }}
+            animate={{ width: `${progress}%` }}
+            transition={{ duration: 0.1, ease: "linear" }}
+          />
+        </div>
+      )}
+      
       <div className="flex items-start gap-3">
         {getIcon()}
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium leading-relaxed">
+          <motion.p 
+            className="text-sm font-medium leading-relaxed"
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.1 }}
+          >
             {toast.message}
-          </p>
+          </motion.p>
         </div>
-        <button
+        <motion.button
           onClick={() => onRemove(toast.id)}
-          className="flex-shrink-0 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+          className="flex-shrink-0 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors rounded-lg p-1 hover:bg-black/5 dark:hover:bg-white/5"
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+          initial={{ opacity: 0, rotate: 90 }}
+          animate={{ opacity: 1, rotate: 0 }}
+          transition={{ delay: 0.2 }}
         >
           <IconX className="w-4 h-4" />
-        </button>
+        </motion.button>
       </div>
-    </div>
+    </motion.div>
   );
 };
 
-// Toast container component
+// Enhanced toast container
 const ToastContainer = ({ toasts, onRemove }) => {
-  if (toasts.length === 0) return null;
-
   return (
-    <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
-      <div className="flex flex-col gap-2 pointer-events-auto">
-        {toasts.map(toast => (
+    <div className="fixed top-4 right-4 z-50 space-y-2 max-h-screen overflow-hidden">
+      <AnimatePresence mode="popLayout">
+        {toasts.map((toast) => (
           <Toast key={toast.id} toast={toast} onRemove={onRemove} />
         ))}
-      </div>
+      </AnimatePresence>
     </div>
   );
 };
+
+// Export enhanced toast provider as default
 
 export default ToastProvider;

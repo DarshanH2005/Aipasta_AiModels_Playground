@@ -83,13 +83,17 @@ export const DesktopSidebar = ({
     <>
       <motion.div
         className={cn(
-          "h-full py-4 hidden md:flex md:flex-col bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 w-[250px] shrink-0 rounded-lg shadow-sm",
+          "h-full py-4 hidden md:flex md:flex-col bg-white/80 dark:bg-neutral-900/80 backdrop-blur-xl border border-white/30 dark:border-neutral-700/50 w-[250px] shrink-0 rounded-2xl shadow-2xl transition-all duration-300 hover:shadow-3xl hover:bg-white/90 dark:hover:bg-neutral-900/90",
           className
         )}
         animate={{
           width: animate ? (shouldBeOpen ? "250px" : "60px") : "250px",
           paddingLeft: animate ? (shouldBeOpen ? "12px" : "8px") : "12px",
           paddingRight: animate ? (shouldBeOpen ? "12px" : "8px") : "12px",
+        }}
+        whileHover={{
+          scale: 1.01,
+          transition: { duration: 0.2 }
         }}
         onMouseEnter={() => {
           // When not locked, expand the sidebar on hover
@@ -166,17 +170,30 @@ export const SidebarLink = ({
 }) => {
   const { open, animate } = useSidebar();
   return (
-    <a
+    <motion.a
       href={link.href}
       className={cn(
-        "flex items-center p-2 rounded-md text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 hover:text-neutral-800 dark:hover:text-neutral-100 transition-colors group/sidebar",
+        "flex items-center p-3 rounded-xl text-neutral-600 dark:text-neutral-300 hover:bg-white/60 dark:hover:bg-neutral-800/60 hover:text-neutral-800 dark:hover:text-neutral-100 transition-all duration-200 group/sidebar backdrop-blur-sm border border-transparent hover:border-white/20 dark:hover:border-neutral-700/20 hover:shadow-lg",
         className
       )}
+      whileHover={{ 
+        scale: 1.02,
+        x: 2,
+        transition: { duration: 0.15 }
+      }}
+      whileTap={{ 
+        scale: 0.98,
+        transition: { duration: 0.1 }
+      }}
       {...props}
     >
-      <div className="flex-shrink-0">
+      <motion.div 
+        className="flex-shrink-0"
+        whileHover={{ rotate: 5 }}
+        transition={{ duration: 0.15 }}
+      >
         {link.icon}
-      </div>
+      </motion.div>
 
       <motion.span
         animate={{
@@ -187,6 +204,6 @@ export const SidebarLink = ({
       >
         {link.label}
       </motion.span>
-    </a>
+    </motion.a>
   );
 };

@@ -70,9 +70,13 @@ export const useStreamingResponses = () => {
       const current = prev.get(responseId);
       if (!current) return prev;
       
+      // Extract error message from various error formats
+      const errorMessage = error?.message || error?.messageText || error?.msg || 
+                          (typeof error === 'string' ? error : 'An error occurred');
+      
       const updated = {
         ...current,
-        error: error.message || 'An error occurred',
+        error: errorMessage,
         isComplete: true
       };
       

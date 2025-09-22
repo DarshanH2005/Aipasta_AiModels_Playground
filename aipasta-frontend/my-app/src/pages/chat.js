@@ -1,180 +1,32 @@
-import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { useAuth } from '../contexts/AuthContext';
 import { AuthModal, UserCreditsDisplay, MultiResponseContainer, ModelSelectionModal, SimpleUploadButton, PlaceholdersAndVanishInput } from '../features';
-import { ToastProvider, useToast, SettingsModal, PlansModal, Sidebar, SidebarBody, SidebarLink, SidebarProvider, SidebarFooter } from '../shared';
+import { ToastProvider, useToast, Sidebar, SidebarBody, SidebarLink, SidebarProvider, SidebarFooter } from '../shared';
 import ThemeToggle from '../components/ui/working-theme-toggle';
+import PremiumChatMessage from '../components/chat/PremiumChatMessage';
+
+// Lazy load heavy components for better performance
+const SettingsModal = lazy(() => import('../shared/components/SettingsModal'));
+const PlansModal = lazy(() => import('../shared/components/PlansModal'));
+import { SlideUp, FadeIn, StaggerContainer, StaggerItem, PremiumButton, SkeletonLoader } from '../components/animations';
 import { IconBrain, IconRobot, IconSend, IconSettings, IconChevronDown, IconPhoto, IconMusic, IconCurrency, IconEye, IconVideo, IconFile, IconAlertTriangle, IconChevronUp, IconPinned, IconPin, IconTrash, IconLogout, IconMenu2, IconSun, IconMoon } from '@tabler/icons-react';
 import { useStreamingResponses, streamModelResponse } from '../hooks/useStreamingResponses';
-import { getChatSessions, createChatSession, getChatSession, sendChatMessage, deleteChatSession, checkBackendHealth, retryBackendConnection } from '../lib/api-client';
+import { getChatSessions, createChatSession, getChatSession, sendChatMessage, deleteChatSession, checkBackendHealth, retryBackendConnection, clearChatSessionsCache } from '../lib/api-client';
 import { AI_MODELS, AI_CHAT_PLACEHOLDERS } from '../constants/models';
 import { calculateTokensNeeded, hasSufficientTokens, getTokenRequirements } from '../utils/tokens';
 
-// Optimized chat message component for streaming responses
-const ChatMessage = ({ message, isUser, streamingResponses, hasActiveResponses }) => {
-  const [imageLoaded, setImageLoaded] = useState({});
-  
-  const handleImageLoad = (fileId) => {
-    setImageLoaded(prev => ({ ...prev, [fileId]: true }));
-  };
-
-  // Handle streaming AI responses
-  if (!isUser && streamingResponses && streamingResponses.length > 0) {
-    return (
-      <div className="flex justify-start mb-6 px-4">
-        <div className="max-w-[90%] w-full">
-          <MultiResponseContainer
-            responses={streamingResponses}
-            timestamp={message.timestamp}
-            attachments={message.attachments}
-            isLoading={hasActiveResponses}
-            loadingModelCount={hasActiveResponses ? streamingResponses.filter(r => !r.isComplete).length : 0}
-          />
-        </div>
-      </div>
-    );
-  }
-
+// Enhanced chat message component with premium animations
+const ChatMessage = ({ message, isUser, streamingResponses, hasActiveResponses, delay = 0 }) => {
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-6 px-4`}>
-      <div className={`max-w-[80%] rounded-xl shadow-sm border transition-all duration-200 ${
-        isUser 
-          ? 'bg-purple-600 text-white border-purple-500 shadow-purple-200 dark:shadow-purple-900/20' 
-          : 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 border-gray-200 dark:border-neutral-700 hover:shadow-md'
-      }`}>
-        {/* Model label for AI responses */}
-        {!isUser && message.model && (
-          <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-600 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-neutral-700 dark:to-neutral-800 rounded-t-xl">
-            <div className="flex items-center justify-between">
-              <div className="font-medium text-sm text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                {message.model.name}
-              </div>
-              <div className="text-xs text-neutral-500 dark:text-neutral-400 bg-white dark:bg-neutral-800 px-2 py-1 rounded-full">
-                {message.model.provider}
-              </div>
-            </div>
-          </div>
-        )}
-        
-        <div className="p-5">
-          {/* Text content */}
-          {message.content && (
-            <div className="leading-relaxed text-[15px]">{message.content}</div>
-          )}
-          
-          {/* Attachments */}
-          {message.attachments && message.attachments.length > 0 && (
-            <div className="space-y-2 mt-2">
-              {message.attachments.map((attachment) => {
-                if (attachment.type.startsWith('image/')) {
-                  return (
-                    <div key={attachment.id} className="relative">
-                      <img
-                        src={attachment.url || attachment.preview}
-                        alt={attachment.name}
-                        className={`max-w-full rounded transition-opacity duration-200 ${
-                          imageLoaded[attachment.id] ? 'opacity-100' : 'opacity-0'
-                        }`}
-                        style={{ maxHeight: '300px', objectFit: 'contain' }}
-                        onLoad={() => handleImageLoad(attachment.id)}
-                      />
-                      {!imageLoaded[attachment.id] && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-neutral-200 dark:bg-neutral-600 rounded">
-                          <div className="animate-spin w-6 h-6 border-2 border-neutral-400 border-t-neutral-600 rounded-full"></div>
-                        </div>
-                      )}
-                      <div className="text-xs opacity-75 mt-1">{attachment.name}</div>
-                    </div>
-                  );
-                }
-                
-                if (attachment.type.startsWith('audio/')) {
-                  return (
-                    <div key={attachment.id} className="bg-black/10 dark:bg-white/10 rounded p-3">
-                      <div className="flex items-center gap-2 mb-2">
-                        <IconMusic className="w-4 h-4" />
-                        <span className="text-sm font-medium">{attachment.name}</span>
-                      </div>
-                      <audio 
-                        controls 
-                        className="w-full" 
-                        style={{ maxWidth: '300px' }}
-                        src={attachment.url || attachment.preview}
-                      >
-                        Your browser does not support the audio element.
-                      </audio>
-                    </div>
-                  );
-                }
-                
-                if (attachment.type.startsWith('video/')) {
-                  return (
-                    <div key={attachment.id} className="bg-black/10 dark:bg-white/10 rounded p-3">
-                      <div className="flex items-center gap-2 mb-2">
-                        <IconVideo className="w-4 h-4" />
-                        <span className="text-sm font-medium">{attachment.name}</span>
-                      </div>
-                      <video 
-                        controls 
-                        className="w-full rounded"
-                        style={{ maxWidth: '400px', maxHeight: '300px' }}
-                        src={attachment.url || attachment.preview}
-                      >
-                        Your browser does not support the video element.
-                      </video>
-                    </div>
-                  );
-                }
-                
-                // Fallback for other file types
-                return (
-                  <div key={attachment.id} className="flex items-center gap-2 bg-black/10 dark:bg-white/10 rounded p-2">
-                    <IconFile className="w-4 h-4" />
-                    <span className="text-sm">{attachment.name}</span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          
-          {/* Token information for user messages */}
-          {isUser && (message.totalTokens || message.tokens) && (
-            <div className={`text-xs mt-2 pt-2 border-t ${
-              isUser 
-                ? 'text-purple-100 border-purple-400' 
-                : 'text-neutral-500 border-neutral-300 dark:border-neutral-600'
-            }`}>
-              {message.totalTokens ? (
-                <div>
-                  Tokens used: {message.totalTokens} 
-                  {message.modelCount && ` • ${message.modelCount} models`}
-                </div>
-              ) : (
-                <div>
-                  Tokens used: {message.tokens}
-                </div>
-              )}
-            </div>
-          )}
-          
-          {/* Token information for AI responses */}
-          {!isUser && message.tokensUsed && (
-            <div className="text-xs mt-2 pt-2 border-t border-neutral-300 dark:border-neutral-600 text-neutral-500 dark:text-neutral-400">
-              Tokens: {message.tokensUsed}
-            </div>
-          )}
-          
-          {/* Timestamp */}
-          {message.timestamp && (
-            <div className={`text-xs mt-1 ${isUser ? 'text-purple-100' : 'text-neutral-500'}`}>
-              {new Date(message.timestamp).toLocaleTimeString()}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+    <PremiumChatMessage
+      message={message}
+      isUser={isUser}
+      streamingResponses={streamingResponses}
+      hasActiveResponses={hasActiveResponses}
+      delay={delay}
+    />
   );
 };
 
@@ -252,28 +104,47 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
     
     // Group messages into conversation turns (user message followed by AI responses)
     const conversationTurns = [];
-    let currentTurn = null;
     
     // Sort all messages chronologically first
     const sortedMessages = [...messages].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
     
-    sortedMessages.forEach((message) => {
-      if (message.isUser) {
-        // Start a new conversation turn
-        currentTurn = {
-          userMessage: message,
-          aiResponses: [],
-          timestamp: new Date(message.timestamp).getTime()
-        };
-        conversationTurns.push(currentTurn);
-      } else if (currentTurn) {
-        // Add AI response to current turn
-        currentTurn.aiResponses.push(message);
-      }
+    // Separate user and AI messages
+    const userMessages = sortedMessages.filter(msg => msg.isUser);
+    const aiMessages = sortedMessages.filter(msg => !msg.isUser);
+    
+    // Create turns by associating AI responses with their preceding user message
+    userMessages.forEach((userMsg, index) => {
+      const userTimestamp = new Date(userMsg.timestamp).getTime();
+      const nextUserTimestamp = userMessages[index + 1] 
+        ? new Date(userMessages[index + 1].timestamp).getTime() 
+        : Date.now();
+      
+      // Find AI responses that come after this user message and before the next one
+      const relatedAiResponses = aiMessages.filter(aiMsg => {
+        const aiTimestamp = new Date(aiMsg.timestamp).getTime();
+        return aiTimestamp > userTimestamp && aiTimestamp < nextUserTimestamp;
+      });
+      
+      conversationTurns.push({
+        userMessage: userMsg,
+        aiResponses: relatedAiResponses,
+        timestamp: userTimestamp
+      });
     });
     
+    // Debug logging
+    if (conversationTurns.length > 0) {
+      console.log(`🔄 Processing ${conversationTurns.length} conversation turns:`, 
+        conversationTurns.map(turn => ({
+          userContent: turn.userMessage.content.substring(0, 50) + '...',
+          aiResponseCount: turn.aiResponses.length,
+          aiModels: turn.aiResponses.map(r => r.model?.name || 'Unknown')
+        }))
+      );
+    }
+    
     // Convert conversation turns into flow items
-    conversationTurns.forEach((turn) => {
+    conversationTurns.forEach((turn, turnIndex) => {
       // Add user message
       flow.push({
         type: 'message',
@@ -477,7 +348,7 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
     } finally {
       setModelsLoading(false);
     }
-  }, [toast, modelsLoading]);
+  }, [toast, modelsLoading, selectedModels.length]);
 
   const checkAuthAndLoadModels = useCallback(async () => {
     console.log('✅ User authenticated, loading models directly from OpenRouter');
@@ -533,6 +404,14 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
     }
   }, []);
 
+  // Cache for chat sessions with timestamp
+  const chatSessionsCache = useRef({ data: null, timestamp: 0, loading: false });
+  const CACHE_DURATION = 30000; // 30 seconds cache
+  
+  // Rate limiting for chat sessions loading
+  const lastLoadTime = useRef(0);
+  const MIN_LOAD_INTERVAL = 5000; // Minimum 5 seconds between loads
+
   // Fetch chat sessions from backend only when authenticated
   useEffect(() => {
     if (!isAuthenticated || authLoading) {
@@ -542,18 +421,57 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
     }
 
     const loadChatSessions = async () => {
+      const now = Date.now();
+      
+      // Check rate limiting - prevent loading too frequently
+      if (now - lastLoadTime.current < MIN_LOAD_INTERVAL) {
+        console.log('⏱️ Rate limiting: Skipping chat sessions load (too frequent)');
+        return;
+      }
+      
+      // Check cache first
+      if (chatSessionsCache.current.data && 
+          now - chatSessionsCache.current.timestamp < CACHE_DURATION) {
+        console.log('📋 Using cached chat sessions');
+        setChatSessions(chatSessionsCache.current.data);
+        setChatSessionsLoading(false);
+        return;
+      }
+      
+      // Prevent concurrent loads
+      if (chatSessionsCache.current.loading) {
+        console.log('⏳ Chat sessions already loading, skipping...');
+        return;
+      }
+
       try {
+        console.log('🔄 Loading fresh chat sessions from API...');
         setChatSessionsLoading(true);
-        const sessions = await getChatSessions(); // getChatSessions doesn't take parameters
-        setChatSessions(sessions || []);
-        updateBackendStatus(true); // Backend is working
-        console.log(`Loaded ${sessions?.length || 0} chat sessions`);
-      } catch (error) {
-        console.error('Failed to fetch chat sessions:', error);
-        updateBackendStatus(false, error); // Backend is failing
+        chatSessionsCache.current.loading = true;
+        lastLoadTime.current = now;
         
-        // Show user-friendly offline message
-        if (error.status === 500) {
+        const sessions = await getChatSessions();
+        const sessionData = sessions || [];
+        
+        // Update cache
+        chatSessionsCache.current = {
+          data: sessionData,
+          timestamp: now,
+          loading: false
+        };
+        
+        setChatSessions(sessionData);
+        updateBackendStatus(true);
+        console.log(`✅ Loaded ${sessionData.length} chat sessions`);
+      } catch (error) {
+        console.error('❌ Failed to fetch chat sessions:', error);
+        chatSessionsCache.current.loading = false;
+        updateBackendStatus(false, error);
+        
+        // Handle specific error cases
+        if (error.message?.includes('429')) {
+          toast.warning('Too many requests - please wait a moment before refreshing');
+        } else if (error.status === 500) {
           toast.error('Backend server error - working in offline mode');
         } else if (!error.status) {
           toast.error('Backend unavailable - working in offline mode');
@@ -564,6 +482,7 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
         setChatSessions([]); // Empty array on error
       } finally {
         setChatSessionsLoading(false);
+        chatSessionsCache.current.loading = false;
       }
     };
 
@@ -578,6 +497,10 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
     
     try {
       await deleteChatSession(sessionId);
+      
+      // Clear cache and update local state
+      clearChatSessionsCache();
+      chatSessionsCache.current = { data: null, timestamp: 0, loading: false };
       setChatSessions(prev => prev.filter(session => session._id !== sessionId));
       
       // If we deleted the current session, clear the chat
@@ -632,14 +555,22 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
     }
 
     // Check credits before sending
+    console.log('🔍 Chat Debug - Credits check:', { 
+      credits, 
+      userCredits: user?.credits,
+      userTokensBalance: user?.tokens?.balance,
+      userId: user?._id || user?.id
+    });
     if (credits <= 0) {
-      toast.error('No credits left. Please upgrade.');
+      console.log('❌ Credits check failed - No credits:', credits);
+      toast.error(`No credits left (${credits}). Please upgrade.`);
       return;
     }
+    console.log('✅ Credits check passed with:', credits);
 
     // Double-check backend health before sending request
     try {
-      const isHealthy = await apiClient.checkBackendHealth();
+      const isHealthy = await checkBackendHealth();
       if (!isHealthy) {
         setBackendOnline(false);
         handleBackendOffline();
@@ -715,6 +646,11 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
         if (sessionResult?.success && sessionResult.session) {
           sessionId = sessionResult.session.id || sessionResult.session._id;
           setCurrentSessionId(sessionId);
+          
+          // Clear cache to ensure fresh data on next load
+          clearChatSessionsCache();
+          chatSessionsCache.current = { data: null, timestamp: 0, loading: false };
+          
           setChatSessions(prev => [sessionResult.session, ...prev]);
           console.log('Created new session with title:', title);
         } else {
@@ -740,7 +676,7 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
     const currentInput = inputValue;
     const currentFiles = attachedFiles;
 
-    // Add user message to state immediately
+    // Add user message to state immediately with basic deduplication
     const userMessage = {
       id: `msg-${Date.now()}`,
       content: currentInput,
@@ -749,7 +685,21 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
       files: currentFiles
     };
     
-    setMessages(prev => [...prev, userMessage]);
+    setMessages(prev => {
+      // Check if the same message was just added (within last 5 seconds)
+      const recentDuplicate = prev.find(msg => 
+        msg.isUser && 
+        msg.content === currentInput &&
+        (Date.now() - new Date(msg.timestamp).getTime()) < 5000
+      );
+      
+      if (recentDuplicate) {
+        console.log('Prevented duplicate user message:', currentInput);
+        return prev;
+      }
+      
+      return [...prev, userMessage];
+    });
     setInputValue('');
     setAttachedFiles([]);
 
@@ -800,8 +750,7 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
             },
             (error) => {
               console.error(`❌ Error from ${model.name}:`, error);
-              // Ensure the response is marked complete so loading stops
-              try { updateResponse(responseId, '', true); } catch (e) {}
+              // Use setResponseError to properly handle the error state
               setResponseError(responseId, error);
               
               // Check if this is a backend offline error
@@ -965,7 +914,10 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
           new Date(a.timestamp) - new Date(b.timestamp)
         );
         
+        // Replace messages entirely when loading a chat session
+        // This prevents duplicates and ensures we show only the session's messages
         setMessages(sortedMessages);
+        
         console.log(`Loaded ${sortedMessages.length} messages for session ${sessionId}`);
         toast.info(`Loaded conversation with ${sortedMessages.length} messages`);
       } else {
@@ -1082,10 +1034,22 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
         initialMode="login"
       />
 
-      {/* Sidebar + Chat Layout */}
+      {/* Mobile-First Responsive Layout */}
       <div className="h-screen flex bg-gray-50 dark:bg-neutral-950 p-2 gap-2">
+        {/* Enhanced Mobile Overlay with Animation */}
+        {open && (
+          <div 
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden transition-all duration-300 ease-in-out animate-in fade-in-0"
+            onClick={() => setOpen(false)}
+            style={{
+              animation: 'fadeIn 0.3s ease-in-out'
+            }}
+          />
+        )}
+        
         <Sidebar open={open} setOpen={setOpen} animate={true} locked={locked} setLocked={setLocked}>
-          <SidebarBody className="flex flex-col gap-2 h-full bg-white dark:bg-neutral-900 rounded-xl shadow-sm border border-gray-200 dark:border-neutral-800 p-4">
+          <SidebarBody className={`flex flex-col gap-2 h-full bg-white dark:bg-neutral-900 shadow-xl border border-gray-200 dark:border-neutral-800 p-4 transition-all duration-300 ease-in-out
+            ${open ? 'fixed inset-y-0 left-0 z-50 w-80 lg:relative lg:w-auto rounded-none lg:rounded-xl transform translate-x-0' : 'rounded-xl transform -translate-x-full lg:translate-x-0'}`}>
             <div className="flex flex-col space-y-2 flex-shrink-0">
               {/* Logo Card */}
               <div className={`flex items-center ${!(open || locked) ? 'justify-center p-2' : 'justify-between p-3'} bg-gray-50 dark:bg-neutral-800 rounded-lg shadow-sm`}>
@@ -1155,7 +1119,7 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
                   <a
                     key={idx}
                     href={link.href}
-                    className={`flex items-center ${!(open || locked) ? 'p-1 justify-center' : 'p-2'} rounded-lg text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700 hover:text-neutral-800 dark:hover:text-neutral-100 transition-colors`}
+                    className={`flex items-center ${!(open || locked) ? 'p-2 justify-center touch-target' : 'p-3 sm:p-2 touch-target'} rounded-lg text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700 hover:text-neutral-800 dark:hover:text-neutral-100 transition-colors`}
                   >
                     <link.icon className="w-5 h-5" />
                     {(open || locked) && (
@@ -1220,7 +1184,7 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
                         >
                           <button
                             onClick={() => handleLoadChat(session._id)}
-                            className="text-left p-2 text-xs transition-colors min-w-0 w-full"
+                            className="text-left p-3 sm:p-2 text-xs transition-colors min-w-0 w-full touch-target"
                           >
                             <div className={`font-medium truncate min-w-0 text-xs ${
                               currentSessionId === session._id
@@ -1285,81 +1249,98 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
           </SidebarBody>
         </Sidebar>
 
-        {/* Main Chat Area */}
-        <div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-neutral-900 rounded-xl shadow-sm border border-gray-200 dark:border-neutral-800">
-          {/* Chat Header */}
-          <div className="bg-gradient-to-r from-white to-gray-50 dark:from-neutral-800 dark:to-neutral-700 border-b border-neutral-200 dark:border-neutral-700 p-4 rounded-t-xl">
+        {/* Main Chat Area - Mobile First */}
+        <div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-neutral-900 rounded-none sm:rounded-xl shadow-sm border-0 sm:border border-gray-200 dark:border-neutral-800">
+          {/* Mobile Sticky Header */}
+          <div className="sticky top-0 z-30 bg-gradient-to-r from-white to-gray-50 dark:from-neutral-800 dark:to-neutral-700 border-b border-neutral-200 dark:border-neutral-700 p-3 sm:p-4 rounded-none sm:rounded-t-xl">
             <div className="flex items-center justify-between">
-              <div className="flex-1 min-w-0">
-                <h1 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
-                  {selectedModels.length === 0 && 'Select AI Models'}
-                  {selectedModels.length === 1 && `Chat with ${selectedModels[0].name}`}
-                  {selectedModels.length > 1 && `Multi-Model Chat (${selectedModels.length} models)`}
-                </h1>
-                {selectedModels.length > 0 && (
-                  <p className="text-sm text-neutral-500 dark:text-neutral-400">
-                    {selectedModels.length === 1 
-                      ? `Provider: ${selectedModels[0].provider}`
-                      : `Providers: ${[...new Set(selectedModels.map(m => m.provider))].join(', ')}`
-                    }
-                  </p>
-                )}
+              {/* Mobile Hamburger + Title */}
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <button
+                  onClick={() => setOpen(!open)}
+                  className="lg:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-neutral-700 transition-colors touch-target"
+                  aria-label="Toggle sidebar"
+                >
+                  <IconMenu2 className="w-5 h-5 text-neutral-700 dark:text-neutral-200" />
+                </button>
+                
+                <div className="flex-1 min-w-0">
+                  {/* Responsive Title */}
+                  <h1 className="text-base sm:text-lg font-semibold text-neutral-900 dark:text-neutral-100 truncate">
+                    {selectedModels.length === 0 && 'Select AI Models'}
+                    {selectedModels.length === 1 && (
+                      <span className="hidden sm:inline">Chat with {selectedModels[0].name}</span>
+                    )}
+                    {selectedModels.length === 1 && (
+                      <span className="sm:hidden">{selectedModels[0].name}</span>
+                    )}
+                    {selectedModels.length > 1 && (
+                      <>
+                        <span className="hidden sm:inline">Multi-Model Chat ({selectedModels.length} models)</span>
+                        <span className="sm:hidden">{selectedModels.length} Models</span>
+                      </>
+                    )}
+                  </h1>
+                  {selectedModels.length > 0 && (
+                    <p className="hidden sm:block text-sm text-neutral-500 dark:text-neutral-400 truncate">
+                      {selectedModels.length === 1 
+                        ? `Provider: ${selectedModels[0].provider}`
+                        : `Providers: ${[...new Set(selectedModels.map(m => m.provider))].join(', ')}`
+                      }
+                    </p>
+                  )}
+                </div>
               </div>
               
-              <div className="flex items-center gap-2">
-                {/* Model Selection Button */}
-                <button
+              {/* Mobile-First Action Buttons */}
+              <div className="flex items-center gap-1 sm:gap-2">
+                {/* Enhanced Model Selection Button - Mobile Responsive */}
+                <PremiumButton
                   onClick={() => setShowModelModal(true)}
                   disabled={modelsLoading}
-                  className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white rounded-lg transition-colors shadow-sm"
+                  loading={modelsLoading}
+                  variant="gradient"
+                  size="md"
+                  className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3 py-1.5 sm:py-2 touch-target"
                 >
                   <IconBrain className="w-4 h-4" />
-                  <span className="text-sm font-medium">
-                    {modelsLoading && 'Loading Models...'}
+                  <span className="hidden sm:inline font-medium">
                     {!modelsLoading && selectedModels.length === 0 && 'Select Models'}
                     {!modelsLoading && selectedModels.length === 1 && 'Change Model'}
                     {!modelsLoading && selectedModels.length > 1 && `${selectedModels.length} Selected`}
                   </span>
-                </button>
-                {/* Settings modal trigger in header */}
-                <button
-                  onClick={() => setIsSettingsOpen(true)}
-                  className="px-3 py-2 bg-white dark:bg-neutral-700 hover:bg-gray-50 dark:hover:bg-neutral-600 text-neutral-800 dark:text-neutral-200 rounded-lg transition-colors border border-gray-200 dark:border-neutral-600 shadow-sm"
-                  title="Settings"
-                >
-                  <IconSettings className="w-5 h-5" />
-                </button>
-              </div>
-              {/* Header Logout Button - always accessible */}
-              <button
-                onClick={async () => {
-                  await logout();
-                  // Intentionally do not redirect after logout
-                }}
-                title="Logout"
-                className="ml-3 p-2 rounded-md bg-transparent hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
-              >
-                <IconLogout className="w-5 h-5 text-neutral-700 dark:text-neutral-200" />
-              </button>
-            </div>
-            
-            {/* Selected Models Display */}
-            {selectedModels.length > 1 && (
-              <div className="flex flex-wrap gap-1 mt-2">
-                {selectedModels.map(model => (
-                  <span
-                    key={model.id}
-                    className="inline-flex items-center px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs rounded-full"
-                  >
-                    {model.name}
+                  <span className="sm:hidden font-medium">
+                    {selectedModels.length || 'Models'}
                   </span>
-                ))}
+                </PremiumButton>
+                
+                {/* Enhanced Settings Button - Mobile Responsive */}
+                <PremiumButton
+                  onClick={() => setIsSettingsOpen(true)}
+                  variant="secondary"
+                  size="md"
+                  title="Settings"
+                  className="px-2 sm:px-3 py-1.5 sm:py-2 touch-target"
+                >
+                  <IconSettings className="w-4 h-4 sm:w-5 sm:h-5" />
+                </PremiumButton>
+                
+                {/* Header Logout Button - Mobile Responsive */}
+                <button
+                  onClick={async () => {
+                    await logout();
+                  }}
+                  title="Logout"
+                  className="p-2 rounded-md bg-transparent hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors touch-target"
+                >
+                  <IconLogout className="w-4 h-4 sm:w-5 sm:h-5 text-neutral-700 dark:text-neutral-200" />
+                </button>
               </div>
-            )}
+            </div>
           </div>
 
           {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto scrollbar-custom py-6 chat-window bg-gray-50 dark:bg-neutral-800">
+          <div className="flex-1 overflow-y-auto scrollbar-custom mobile-scroll py-4 sm:py-6 chat-window bg-gray-50 dark:bg-neutral-800">
             {messages.length === 0 && (
               <div className="text-center text-neutral-500 dark:text-neutral-400 py-16 px-4">
                 <div className="bg-white dark:bg-neutral-800 rounded-2xl p-8 max-w-md mx-auto shadow-sm border border-gray-200 dark:border-neutral-700">
@@ -1367,89 +1348,97 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
                   {selectedModels.length === 0 ? (
                     <>
                       <h2 className="text-xl font-medium mb-2 text-neutral-900 dark:text-neutral-100">Welcome to AI Pasta</h2>
-                      <p className="text-neutral-600 dark:text-neutral-400">Click &quot;Select Models&quot; above to choose AI models and start chatting</p>
-                    </>
-                  ) : selectedModels.length === 1 ? (
-                    <>
-                      <h2 className="text-xl font-medium mb-2 text-neutral-900 dark:text-neutral-100">Chat with {selectedModels[0].name}</h2>
-                      <p className="text-neutral-600 dark:text-neutral-400">Start a conversation by typing your message below</p>
+                      <p className="text-neutral-600 dark:text-neutral-400">Select AI models above to start chatting</p>
                     </>
                   ) : (
                     <>
-                      <h2 className="text-xl font-medium mb-2 text-neutral-900 dark:text-neutral-100">Multi-Model Chat Ready</h2>
-                      <p className="text-neutral-600 dark:text-neutral-400 mb-4">Your message will be sent to {selectedModels.length} AI models simultaneously</p>
-                      <div className="flex flex-wrap justify-center gap-2">
-                        {selectedModels.map(model => (
-                          <span
-                            key={model.id}
-                            className="inline-flex items-center px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-sm rounded-full border border-purple-200 dark:border-purple-800"
-                          >
-                            {model.name}
-                          </span>
-                        ))}
-                      </div>
+                      <h2 className="text-xl font-medium mb-2 text-neutral-900 dark:text-neutral-100">Ready to Chat</h2>
+                      <p className="text-neutral-600 dark:text-neutral-400 mb-4">Start a conversation by typing your message below</p>
+                      {selectedModels.length > 1 && (
+                        <div className="flex flex-wrap justify-center gap-2">
+                          {selectedModels.map(model => (
+                            <span
+                              key={model.id}
+                              className="inline-flex items-center px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-sm rounded-full border border-purple-200 dark:border-purple-800"
+                            >
+                              {model.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
               </div>
             )}
             
-            {conversationFlow.map((item, index) => {
-              if (item.type === 'message') {
-                const message = item.data;
-                return (
-                  <ChatMessage
-                    key={message.id}
-                    message={message}
-                    isUser={message.isUser}
-                    streamingResponses={[]} // Individual messages don't need streaming responses
-                    hasActiveResponses={false}
-                  />
-                );
-              } else if (item.type === 'responses') {
-                const responseData = item.data;
-                return (
-                  <div key={`responses-${index}`} className="mb-6">
-                    <MultiResponseContainer
-                      responses={responseData.responses}
-                      timestamp={responseData.timestamp}
-                      attachments={[]}
-                      isLoading={responseData.hasActiveResponses}
-                      loadingModelCount={Array.from(responseData.loadingStates.values()).filter(Boolean).length}
-                    />
-                  </div>
-                );
-              }
-              return null;
-            })}
+            <StaggerContainer className="space-y-1">
+              {conversationFlow.map((item, index) => {
+                if (item.type === 'message') {
+                  const message = item.data;
+                  return (
+                    <StaggerItem key={message.id}>
+                      <ChatMessage
+                        message={message}
+                        isUser={message.isUser}
+                        streamingResponses={[]} // Individual messages don't need streaming responses
+                        hasActiveResponses={false}
+                        delay={index * 0.05} // Subtle stagger delay
+                      />
+                    </StaggerItem>
+                  );
+                } else if (item.type === 'responses') {
+                  const responseData = item.data;
+                  return (
+                    <StaggerItem key={`responses-${index}`}>
+                      <div className="mb-6">
+                        <MultiResponseContainer
+                          responses={responseData.responses}
+                          timestamp={responseData.timestamp}
+                          attachments={[]}
+                          isLoading={responseData.hasActiveResponses}
+                          loadingModelCount={Array.from(responseData.loadingStates.values()).filter(Boolean).length}
+                        />
+                      </div>
+                    </StaggerItem>
+                  );
+                }
+                return null;
+              })}
+            </StaggerContainer>
 
-            {/* Loading indicator */}
+            {/* Enhanced loading indicator */}
             {(isSubmitting && !hasActiveResponses) && (
-              <div className="mb-6 px-4">
-                <div className="bg-white dark:bg-neutral-800 rounded-xl p-4 max-w-xs shadow-sm border border-gray-200 dark:border-neutral-700">
-                  <div className="flex items-center space-x-3 text-neutral-600 dark:text-neutral-400">
-                    <div className="animate-spin w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full"></div>
-                    <span className="text-sm">Preparing responses...</span>
+              <SlideUp className="mb-6 px-4">
+                <div className="bg-white/90 dark:bg-neutral-800/90 backdrop-blur-md rounded-xl p-4 max-w-xs shadow-lg border border-white/20 dark:border-neutral-700/50">
+                  <div className="flex items-center space-x-3 text-neutral-700 dark:text-neutral-300">
+                    <div className="relative">
+                      <div className="animate-spin w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full"></div>
+                      <div className="absolute inset-0 animate-pulse w-4 h-4 border-2 border-purple-200 dark:border-purple-600 rounded-full"></div>
+                    </div>
+                    <span className="text-sm font-medium">AI is preparing responses...</span>
                   </div>
                 </div>
-              </div>
+              </SlideUp>
             )}
             
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input Area - Fixed at Bottom */}
-          <div className="p-4 bg-gray-50 dark:bg-neutral-800 border-t border-gray-200 dark:border-neutral-700 rounded-b-xl">
-            {/* Warning Cards */}
+          {/* Mobile-First Enhanced Input Area */}
+          <div className="sticky bottom-0 p-3 sm:p-4 bg-gradient-to-t from-gray-50/95 to-gray-50/85 dark:from-neutral-800/95 dark:to-neutral-800/85 backdrop-blur-md border-t border-white/20 dark:border-neutral-700/50 rounded-none sm:rounded-b-xl safe-area-inset-bottom">
+            {/* Enhanced Warning Cards */}
             <div className="space-y-2 mb-4">
               {/* Low Credits Warning */}
               {isAuthenticated && isClient && credits <= 0 && (
-                <div className="flex items-center gap-3 p-4 bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg shadow-sm">
-                  <IconAlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0" />
-                  <div className="text-sm text-red-700 dark:text-red-300">
-                    No tokens remaining. Please upgrade your account to continue.
+                <SlideUp>
+                  <div className="flex items-center gap-3 p-4 bg-red-100/80 dark:bg-red-900/40 backdrop-blur-sm border border-red-200/50 dark:border-red-800/50 rounded-xl shadow-lg">
+                    <IconAlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+                    <div className="text-sm font-medium text-red-700 dark:text-red-300">
+                      No tokens remaining. Please upgrade your account to continue.
+                    </div>
                   </div>
-                </div>
+                </SlideUp>
               )}
 
               {/* Insufficient Tokens for Current Request Warning */}
@@ -1460,32 +1449,34 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
                     return total + (isPaidModel ? 10 : 1);
                   }, 0);
                   return tokensNeeded > credits ? (
-                    <div className="flex items-center gap-3 p-4 bg-orange-100 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800 rounded-lg shadow-sm">
-                      <IconAlertTriangle className="w-5 h-5 text-orange-600 flex-shrink-0" />
-                      <div className="text-sm text-orange-700 dark:text-orange-300">
-                        Insufficient tokens: have {credits}, need {tokensNeeded} tokens
+                    <SlideUp delay={0.1}>
+                      <div className="flex items-center gap-3 p-4 bg-orange-100/80 dark:bg-orange-900/40 backdrop-blur-sm border border-orange-200/50 dark:border-orange-800/50 rounded-xl shadow-lg">
+                        <IconAlertTriangle className="w-5 h-5 text-orange-600 dark:text-orange-400 flex-shrink-0" />
+                        <div className="text-sm font-medium text-orange-700 dark:text-orange-300">
+                          Insufficient tokens: have {credits}, need {tokensNeeded} tokens
+                        </div>
                       </div>
-                    </div>
+                    </SlideUp>
                   ) : null;
                 })()
               )}
             </div>
 
-            {/* Backend Connection Status */}
+            {/* Enhanced Backend Connection Status */}
             {!backendOnline && (
-              <div className="flex justify-center mb-4">
-                <div className="flex items-center gap-3 p-3 bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg shadow-sm">
+              <FadeIn className="flex justify-center mb-4">
+                <div className="flex items-center gap-3 p-3 bg-red-100/80 dark:bg-red-900/40 backdrop-blur-sm border border-red-200/50 dark:border-red-800/50 rounded-xl shadow-lg">
                   <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-                  <div className="text-sm text-red-700 dark:text-red-300">
+                  <div className="text-sm font-medium text-red-700 dark:text-red-300">
                     {isReconnecting ? '🔄 Reconnecting to backend...' : '❌ Backend is offline - trying to reconnect'}
                   </div>
                 </div>
-              </div>
+              </FadeIn>
             )}
 
-            {/* Input Card */}
+            {/* Mobile-First Enhanced Input Card */}
             <div className="flex justify-center">
-              <div className="relative w-full max-w-6xl bg-white dark:bg-neutral-900 rounded-xl shadow-lg border border-gray-300 dark:border-neutral-600 p-2">
+              <div className="relative w-full max-w-6xl bg-white/90 dark:bg-neutral-900/90 backdrop-blur-xl rounded-xl sm:rounded-2xl shadow-lg sm:shadow-2xl border border-white/40 dark:border-neutral-600/40 p-2 sm:p-3 transition-all duration-300 hover:shadow-xl sm:hover:shadow-3xl hover:bg-white/95 dark:hover:bg-neutral-900/95">
                 <div 
                   style={{ 
                     opacity: isSubmitting || selectedModels.length === 0 || (isClient && credits <= 0) ? 0.5 : 1, 
@@ -1511,11 +1502,19 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
                   />
                 </div>
                 
-                {/* Loading overlay */}
+                {/* Enhanced Loading overlay */}
                 {(isSubmitting || hasActiveResponses) && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-white/90 dark:bg-neutral-900/90 rounded-xl pointer-events-none backdrop-blur-sm">
-                    <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
-                  </div>
+                  <FadeIn className="absolute inset-0 flex items-center justify-center bg-white/95 dark:bg-neutral-900/95 rounded-2xl pointer-events-none backdrop-blur-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="relative">
+                        <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+                        <div className="absolute inset-0 w-6 h-6 border-2 border-purple-200 dark:border-purple-700 rounded-full animate-pulse"></div>
+                      </div>
+                      <span className="text-sm font-medium text-purple-600 dark:text-purple-400">
+                        Processing...
+                      </span>
+                    </div>
+                  </FadeIn>
                 )}
               </div>
             </div>
@@ -1523,18 +1522,20 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
         </div>
       </div>
       {/* Settings Modal rendered at page root */}
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        onWalletUpdate={(newState) => {
-          try {
-            if (newState && typeof newState.tokens === 'number') {
-              setWalletTokens(newState.tokens);
-            }
-          } catch (e) {}
-        }}
-        onUpgradeClick={() => setShowPlansModal(true)}
-      />
+      <Suspense fallback={<div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50"><div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div></div>}>
+        <SettingsModal
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          onWalletUpdate={(newState) => {
+            try {
+              if (newState && typeof newState.tokens === 'number') {
+                setWalletTokens(newState.tokens);
+              }
+            } catch (e) {}
+          }}
+          onUpgradeClick={() => setShowPlansModal(true)}
+        />
+      </Suspense>
     </>
   );
 }
@@ -1624,11 +1625,13 @@ export default function ChatPage() {
         />
 
         {/* Plans Modal */}
-        <PlansModal
-          isOpen={showPlansModal}
-          onClose={() => setShowPlansModal(false)}
-          onPlanSelect={handlePlanSelect}
-        />
+        <Suspense fallback={<div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50"><div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div></div>}>
+          <PlansModal
+            isOpen={showPlansModal}
+            onClose={() => setShowPlansModal(false)}
+            onPlanSelect={handlePlanSelect}
+          />
+        </Suspense>
       </SidebarProvider>
     </ToastProvider>
   );

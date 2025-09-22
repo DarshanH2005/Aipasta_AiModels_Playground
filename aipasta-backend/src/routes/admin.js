@@ -496,11 +496,16 @@ const updateModel = async (req, res, next) => {
 const addTokensToUser = async (req, res, next) => {
   try {
     const { userId } = req.params;
-    const { amount, reason = 'Admin token addition' } = req.body;
+    const { amount, reason = 'Admin token addition', tokenType = 'free' } = req.body;
 
     // Validate amount
     if (!amount || amount <= 0) {
       return next(new AppError('Amount must be a positive number', 400));
+    }
+
+    // Validate tokenType
+    if (!['free', 'paid'].includes(tokenType)) {
+      return next(new AppError('Token type must be either "free" or "paid"', 400));
     }
 
     const user = await User.findById(userId);
@@ -508,43 +513,191 @@ const addTokensToUser = async (req, res, next) => {
       return next(new AppError('User not found', 404));
     }
 
-    // Update user tokens
-    const oldBalance = user.tokens?.balance || user.credits || 0;
-    const newBalance = oldBalance + amount;
-
-    // Update tokens object (preferred)
-    if (user.tokens) {
-      user.tokens.balance = newBalance;
-      user.tokens.totalEarned = (user.tokens.totalEarned || 0) + amount;
-      user.tokens.transactions.push({
-        type: 'admin_credit',
-        amount: amount,
-        description: reason,
-        balanceAfter: newBalance,
-        timestamp: new Date(),
-        adminId: req.user._id
-      });
-    } else {
-      // Fallback to credits field for backward compatibility
-      user.credits = newBalance;
+    // Initialize tokens object if it doesn't exist
+    if (!user.tokens) {
+      user.tokens = {
+        balance: user.credits || 0,
+        freeTokens: user.credits || 0,
+        paidTokens: 0,
+        totalUsed: 0,
+        transactions: []
+      };
     }
+
+    // Store old values for response
+    const oldBalance = user.tokens.balance || 0;
+    const oldFreeTokens = user.tokens.freeTokens || 0;
+    const oldPaidTokens = user.tokens.paidTokens || 0;
+
+    // Add tokens based on type
+    if (tokenType === 'free') {
+      user.tokens.freeTokens = oldFreeTokens + amount;
+    } else if (tokenType === 'paid') {
+      user.tokens.paidTokens = oldPaidTokens + amount;
+    }
+
+    // Update total balance
+    user.tokens.balance = user.tokens.freeTokens + user.tokens.paidTokens;
+    
+    // Update totalEarned if it exists
+    if (user.tokens.totalEarned !== undefined) {
+      user.tokens.totalEarned = (user.tokens.totalEarned || 0) + amount;
+    }
+
+    // Add transaction record
+    user.tokens.transactions.push({
+      type: `admin_credit_${tokenType}`,
+      amount: amount,
+      description: `${reason} (${tokenType} tokens)`,
+      balanceAfter: user.tokens.balance,
+      timestamp: new Date(),
+      adminId: req.user._id,
+      metadata: {
+        tokenType: tokenType,
+        freeTokensAfter: user.tokens.freeTokens,
+        paidTokensAfter: user.tokens.paidTokens
+      }
+    });
+
+    // Update legacy credits field for backward compatibility
+    user.credits = user.tokens.balance;
 
     await user.save();
 
     // Log admin action
-    console.log(`Admin ${req.user.email} added ${amount} tokens to user ${user.email}. Reason: ${reason}`);
+    console.log(`Admin ${req.user.email} added ${amount} ${tokenType} tokens to user ${user.email}. Reason: ${reason}`);
 
     res.status(200).json({
       status: 'success',
-      message: `Successfully added ${amount} tokens to ${user.name}`,
+      message: `Successfully added ${amount} ${tokenType} tokens to ${user.name}`,
       data: {
         user: {
           _id: user._id,
           name: user.name,
           email: user.email,
           previousBalance: oldBalance,
-          newBalance: newBalance,
-          tokensAdded: amount
+          newBalance: user.tokens.balance,
+          tokensAdded: amount,
+          tokenType: tokenType,
+          tokens: {
+            balance: user.tokens.balance,
+            freeTokens: user.tokens.freeTokens,
+            paidTokens: user.tokens.paidTokens
+          }
+        }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get all plans (admin action)
+// @route   GET /api/admin/plans
+// @access  Private (Admin only)
+const getPlans = async (req, res, next) => {
+  try {
+    const Plan = require('../models/Plan');
+    const plans = await Plan.find({ isActive: true }).sort({ sortOrder: 1, priceINR: 1 });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Plans retrieved successfully',
+      data: {
+        plans: plans,
+        count: plans.length
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Change user's plan (admin action)
+// @route   POST /api/admin/users/:userId/plan
+// @access  Private (Admin only)
+const changeUserPlan = async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const { planId } = req.body;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return next(new AppError('User not found', 404));
+    }
+
+    // Validate plan if provided
+    let plan = null;
+    if (planId) {
+      const Plan = require('../models/Plan');
+      plan = await Plan.findById(planId);
+      if (!plan) {
+        return next(new AppError('Plan not found', 404));
+      }
+    }
+
+    // Update user's plan
+    const oldPlan = user.currentPlan;
+    user.currentPlan = planId || null;
+
+    // Add to plan history if upgrading to a premium plan
+    if (planId) {
+      user.planHistory.push({
+        planId: planId,
+        purchasedAt: new Date(),
+        tokensReceived: plan.tokens,
+        amountPaid: 0, // Admin change, no payment
+        paymentId: 'admin_change',
+        status: 'completed'
+      });
+
+      // Optionally add plan tokens as paid tokens
+      if (plan.tokens > 0) {
+        if (!user.tokens) {
+          user.tokens = {
+            balance: 0,
+            freeTokens: 0,
+            paidTokens: 0,
+            totalUsed: 0,
+            transactions: []
+          };
+        }
+        
+        user.tokens.paidTokens += plan.tokens;
+        user.tokens.balance = user.tokens.freeTokens + user.tokens.paidTokens;
+        
+        user.tokens.transactions.push({
+          type: 'admin_plan_change',
+          amount: plan.tokens,
+          description: `Plan upgraded to ${plan.displayName} by admin`,
+          balanceAfter: user.tokens.balance,
+          timestamp: new Date(),
+          adminId: req.user._id,
+          metadata: {
+            planId: planId,
+            planName: plan.displayName
+          }
+        });
+      }
+    }
+
+    await user.save();
+
+    const planName = planId ? (plan ? plan.displayName : 'Premium') : 'Free';
+    
+    // Log admin action
+    console.log(`Admin ${req.user.email} changed user ${user.email} plan from ${oldPlan || 'Free'} to ${planName}`);
+
+    res.status(200).json({
+      status: 'success',
+      message: `Successfully changed ${user.name}'s plan to ${planName}`,
+      data: {
+        user: {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          currentPlan: user.currentPlan,
+          planName: planName
         }
       }
     });
@@ -559,8 +712,10 @@ router.get('/users', validatePagination, getAllUsers);
 router.get('/users/:userId', getUserDetails);
 router.patch('/users/:userId', validateUserUpdate, updateUser);
 router.post('/users/:userId/tokens', addTokensToUser);
+router.post('/users/:userId/plan', changeUserPlan);
 router.delete('/users/:userId', deleteUser);
 router.get('/system', getSystemMetrics);
 router.patch('/models/:modelId', updateModel);
+router.get('/plans', getPlans);
 
 module.exports = router;

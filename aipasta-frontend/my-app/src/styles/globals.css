@@ -343,3 +343,62 @@ html[data-theme="dark"] input[class*="text-black"] {
 }
 
 /* Removed incompatible @layer and @apply directives for better compatibility */
+
+/* Mobile-First Touch-Friendly Components */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .touch-target {
+    min-height: auto;
+    min-width: auto;
+  }
+}
+
+/* Safe Area Insets for Mobile */
+.safe-area-inset-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Mobile Keyboard Handling */
+@media (max-width: 768px) {
+  .keyboard-adjust {
+    position: relative;
+    transition: all 0.3s ease;
+  }
+  
+  /* When virtual keyboard is open on mobile */
+  @supports (-webkit-appearance: none) and (max-height: 500px) {
+    .keyboard-adjust {
+      padding-bottom: 0;
+    }
+  }
+}
+
+/* Improved Mobile Scrolling */
+.mobile-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Reduce animations on mobile for better performance */
+@media (max-width: 768px) {
+  .reduce-motion * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Respect user's motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

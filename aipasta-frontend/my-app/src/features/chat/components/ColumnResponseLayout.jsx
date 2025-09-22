@@ -223,7 +223,7 @@ const ColumnResponseLayout = ({ responses, timestamp, attachments }) => {
 
   return (
     <>
-      <div className="overflow-x-auto scrollbar-custom pb-4">
+      <div className="overflow-x-auto scrollbar-custom pb-4 pl-2">
         <div 
           className="flex gap-4" 
           style={{ 

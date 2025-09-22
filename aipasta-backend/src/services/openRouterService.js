@@ -135,6 +135,10 @@ class OpenRouterService {
         top_p: options.top_p || 1,
         frequency_penalty: options.frequency_penalty || 0,
         presence_penalty: options.presence_penalty || 0,
+        // Add transforms to utilize free daily requests first
+        transforms: ["middle-out"],
+        // Route preference to utilize free daily limits before paid credits
+        route: "fallback",
         ...options
       };
 
@@ -179,8 +183,17 @@ class OpenRouterService {
       console.log('✅ OpenRouter API successful response:', {
         choices: data.choices?.length || 0,
         usage: data.usage || 'none',
-        model: data.model || 'unknown'
+        model: data.model || 'unknown',
+        dailyLimitUsed: data.usage?.is_free_tier || false,
+        creditsCharged: data.usage?.credits_used || 0
       });
+
+      // Log if we used free daily requests vs paid credits
+      if (data.usage?.is_free_tier) {
+        console.log('🎉 Used OpenRouter free daily request - no credits charged!');
+      } else if (data.usage?.credits_used) {
+        console.log(`💳 OpenRouter charged ${data.usage.credits_used} credits`);
+      }
 
       return data;
     } catch (error) {

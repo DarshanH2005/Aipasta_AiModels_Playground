@@ -13,96 +13,161 @@ const connectDB = async () => {
   }
 };
 
-// Default plans based on requirements
+// Intelligent Profitable Plans - Market-aligned pricing with healthy profit margins
 const defaultPlans = [
   {
     name: 'starter-free',
-    displayName: 'Starter Free',
-    description: 'Activate your free plan - Already included with registration!',
+    displayName: 'Free Explorer',
+    description: 'Perfect for trying out AI - Get started for free!',
     priceINR: 0,
-    tokens: 0, // No additional tokens - users already get 10k on signup
+    tokens: 0, // No additional tokens - users get 10k on signup
     modelType: 'free',
     features: [
-      'Already active with your account',
       '10,000 free tokens included at signup',
-      'Access to free models only',
-      'Basic support'
+      'Access to 15+ free AI models',
+      'Llama 3.1 8B, Mistral 7B, Gemma 2B',
+      'Community support',
+      'Basic usage analytics'
     ],
     isActive: true,
     sortOrder: 1,
     limitations: {
-      maxRequestsPerHour: 50,
+      maxRequestsPerHour: 30,
       maxModelsPerRequest: 1,
-      allowedModelTypes: ['free']
+      allowedModelTypes: ['free'],
+      maxTokensPerMonth: 50000
     }
   },
   {
-    name: 'basic-free-pack',
-    displayName: 'Basic Free Pack',
-    description: '10M tokens for free models - Best value for beginners',
-    priceINR: 19,
-    tokens: 10000000, // 10M tokens
+    name: 'starter-boost',
+    displayName: 'Starter Boost',
+    description: 'Extra free model tokens for hobbyists and learners',
+    priceINR: 99,
+    tokens: 100000, // 100K tokens - reasonable for free models
     modelType: 'free',
     features: [
-      '10M tokens for free models',
-      'GPT-3.5 Turbo, Claude 3 Haiku',
-      'Llama 3.1, Gemma 7B',
+      '100K extra tokens for free models',
+      'All free models included',
+      'GPT-3.5, Claude Haiku, Llama variants',
       'Email support',
-      'Basic rate limits'
+      'Usage analytics dashboard',
+      'No daily limits'
     ],
     isActive: true,
     sortOrder: 2,
     limitations: {
-      maxRequestsPerHour: 100,
+      maxRequestsPerHour: 60,
       maxModelsPerRequest: 2,
-      allowedModelTypes: ['free']
+      allowedModelTypes: ['free'],
+      maxTokensPerMonth: 200000
     }
   },
   {
-    name: 'pro-paid-pack',
-    displayName: 'Pro Paid Pack',
-    description: '1M tokens for premium AI models - For serious users',
-    priceINR: 19,
-    tokens: 1000000, // 1M tokens  
+    name: 'pocket-pack',
+    displayName: 'Pocket Pack',
+    description: 'Premium AI for the price of a movie ticket! 🍿',
+    priceINR: 39,
+    tokens: 20000, // 20K tokens - mix of free and some premium access
+    modelType: 'hybrid', // New type for mixed access
+    features: [
+      '20,000 tokens (free + premium models)',
+      '10 premium model requests included',
+      'GPT-4o, Claude 3.5 Sonnet access',
+      'All free models unlimited',
+      'Priority queue processing',
+      'Chat history export',
+      'No ads or watermarks',
+      'Mobile app access',
+      'Community Discord access'
+    ],
+    isActive: true,
+    sortOrder: 2.5, // Place between Starter Boost and Pro Essential
+    limitations: {
+      maxRequestsPerHour: 100,
+      maxModelsPerRequest: 2,
+      allowedModelTypes: ['free', 'paid'], // Can access paid models with limits
+      maxTokensPerMonth: 40000,
+      maxPremiumRequests: 10 // Special limit for premium models
+    }
+  },
+  {
+    name: 'pro-essential',
+    displayName: 'Pro Essential',
+    description: 'Access premium AI models - Perfect for professionals',
+    priceINR: 499,
+    tokens: 50000, // 50K tokens for premium models = ~500-1000 requests
     modelType: 'paid',
     features: [
-      '1M tokens for premium models',
-      'GPT-4o, Claude 3.5 Sonnet',
-      'Llama 3.1 405B, Gemini Pro',
-      'All free models included',
+      '50,000 tokens for premium models',
+      'GPT-4o, Claude 3.5 Sonnet, Gemini Pro',
+      'All free models unlimited',
       'Priority support',
-      'Higher rate limits'
+      'Advanced analytics',
+      'Model comparison tools',
+      'Export conversation history'
     ],
     isActive: true,
     sortOrder: 3,
     limitations: {
-      maxRequestsPerHour: 200,
+      maxRequestsPerHour: 120,
       maxModelsPerRequest: 3,
-      allowedModelTypes: ['free', 'paid']
+      allowedModelTypes: ['free', 'paid'],
+      maxTokensPerMonth: 100000
     }
   },
   {
-    name: 'enterprise-premium',
-    displayName: 'Enterprise Premium',
-    description: '5M tokens for all models + premium features',
-    priceINR: 99,
-    tokens: 5000000, // 5M tokens
+    name: 'pro-unlimited',
+    displayName: 'Pro Unlimited',
+    description: 'Unlimited premium AI access for power users',
+    priceINR: 1299,
+    tokens: 200000, // 200K tokens = ~2000-4000 premium requests
     modelType: 'premium',
     features: [
-      '5M tokens for all models',
-      'Access to latest GPT-4, Claude, Llama',
-      'Custom model fine-tuning',
-      'API access',
+      '200,000 tokens for all models',
+      'Access to latest GPT-4, Claude, Llama 405B',
+      'Unlimited free model usage',
+      'Multiple model responses',
+      'API access (coming soon)',
       '24/7 priority support',
-      'No rate limits',
-      'Advanced analytics'
+      'Advanced usage analytics',
+      'Custom model presets',
+      'Bulk operations'
     ],
     isActive: true,
     sortOrder: 4,
     limitations: {
-      maxRequestsPerHour: 1000,
+      maxRequestsPerHour: 300,
       maxModelsPerRequest: 5,
-      allowedModelTypes: ['free', 'paid', 'premium']
+      allowedModelTypes: ['free', 'paid', 'premium'],
+      maxTokensPerMonth: 500000
+    }
+  },
+  {
+    name: 'enterprise',
+    displayName: 'Enterprise',
+    description: 'Custom solutions for teams and businesses',
+    priceINR: 2999,
+    tokens: 1000000, // 1M tokens = enterprise level usage
+    modelType: 'enterprise',
+    features: [
+      '1,000,000 tokens per month',
+      'All premium models included',
+      'Dedicated model instances',
+      'Custom fine-tuning',
+      'Team collaboration features',
+      'Dedicated account manager',
+      'SLA guarantees',
+      'Custom integrations',
+      'Priority model access',
+      'Advanced security features'
+    ],
+    isActive: true,
+    sortOrder: 5,
+    limitations: {
+      maxRequestsPerHour: 1000,
+      maxModelsPerRequest: 10,
+      allowedModelTypes: ['free', 'paid', 'premium', 'enterprise'],
+      maxTokensPerMonth: 2000000
     }
   }
 ];

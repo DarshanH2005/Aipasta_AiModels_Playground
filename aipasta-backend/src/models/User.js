@@ -419,9 +419,9 @@ userSchema.methods.changedPasswordAfter = function(JWTTimestamp) {
   return false;
 };
 
-// Instance method to check if user has enough credits
+// Instance method to check if user has enough credits (updated to use tokens.balance)
 userSchema.methods.hasCredits = function(amount = 1) {
-  return this.credits >= amount;
+  return this.tokens.balance >= amount;
 };
 
 // Instance method to deduct credits
