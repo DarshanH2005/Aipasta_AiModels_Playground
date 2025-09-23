@@ -325,15 +325,21 @@ userSchema.methods.addTokens = async function(amount, planId = null, paymentInfo
   // Recompute balance
   this.tokens.balance = (this.tokens.freeTokens || 0) + (this.tokens.paidTokens || 0);
 
-  // Add to plan history if payment info provided
+  // Add to plan history if payment info provided (check for duplicates)
   if (paymentInfo) {
-    this.planHistory.push({
-      planId,
-      tokensReceived: amt,
-      amountPaid: paymentInfo.amount,
-      paymentId: paymentInfo.paymentId,
-      status: paymentInfo.status || 'completed'
-    });
+    // Check if this paymentId already exists in planHistory
+    const existingPayment = this.planHistory.find(h => h.paymentId === paymentInfo.paymentId);
+    if (!existingPayment) {
+      this.planHistory.push({
+        planId,
+        tokensReceived: amt,
+        amountPaid: paymentInfo.amount,
+        paymentId: paymentInfo.paymentId,
+        status: paymentInfo.status || 'completed'
+      });
+    } else {
+      console.log('⚠️ Payment already exists in plan history:', paymentInfo.paymentId);
+    }
   }
 
   // Log transaction

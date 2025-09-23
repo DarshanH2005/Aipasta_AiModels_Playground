@@ -444,17 +444,46 @@ const verifyPayment = async (req, res, next) => {
       return res.status(200).json({ status: 'success', message: 'Already processed', data: { user: snapshot } });
     }
 
-    // Create or update event record
-    await WebhookEvent.findOneAndUpdate(
-      { paymentId: payment.id },
-      { $set: { provider: 'razorpay', eventType: 'payment.verify', paymentId: payment.id, orderId: razorpay_order_id, payload: payment, signatureVerified: true } },
-      { upsert: true, new: true }
-    );
+    // Create or update event record (use paymentId as eventId to avoid duplicates)
+    try {
+      await WebhookEvent.findOneAndUpdate(
+        { paymentId: payment.id },
+        { 
+          $set: { 
+            provider: 'razorpay', 
+            eventType: 'payment.verify', 
+            eventId: payment.id, // Use paymentId as eventId to ensure uniqueness
+            paymentId: payment.id, 
+            orderId: razorpay_order_id, 
+            payload: payment, 
+            signatureVerified: true 
+          } 
+        },
+        { upsert: true, new: true }
+      );
+      console.log('✅ WebhookEvent created/updated successfully');
+    } catch (webhookError) {
+      console.log('⚠️ WebhookEvent creation failed (likely duplicate):', webhookError.message);
+      // Continue processing - this is likely a duplicate event which is safe to ignore
+    }
 
     const paymentInfo = { amount: payment.amount / 100, paymentId: payment.id, status: payment.status };
-    await user.addTokens(plan.tokens, plan._id, paymentInfo);
+    
+    try {
+      await user.addTokens(plan.tokens, plan._id, paymentInfo);
+      console.log('✅ Tokens added to user successfully');
+    } catch (tokenError) {
+      console.error('❌ Failed to add tokens to user:', tokenError.message);
+      throw tokenError; // This is critical, re-throw
+    }
 
-    await Plan.findByIdAndUpdate(plan._id, { $inc: { totalPurchases: 1, totalRevenue: plan.priceINR } });
+    try {
+      await Plan.findByIdAndUpdate(plan._id, { $inc: { totalPurchases: 1, totalRevenue: plan.priceINR } });
+      console.log('✅ Plan statistics updated successfully');
+    } catch (planError) {
+      console.log('⚠️ Failed to update plan statistics:', planError.message);
+      // This is not critical for user experience, continue
+    }
 
     // Update user's current plan if applicable
     if (!user.currentPlan || plan.modelType === 'premium' || (plan.modelType === 'paid' && user.currentPlan.modelType === 'free')) {
@@ -463,7 +492,16 @@ const verifyPayment = async (req, res, next) => {
     }
 
     // Mark event processed
-    await WebhookEvent.findOneAndUpdate({ paymentId: payment.id }, { $set: { processed: true, processedAt: new Date() } });
+    try {
+      await WebhookEvent.findOneAndUpdate(
+        { paymentId: payment.id }, 
+        { $set: { processed: true, processedAt: new Date() } }
+      );
+      console.log('✅ WebhookEvent marked as processed');
+    } catch (webhookError) {
+      console.log('⚠️ Failed to mark WebhookEvent as processed:', webhookError.message);
+      // This is not critical for payment processing, continue
+    }
 
     const snapshot = {
       tokens: {
