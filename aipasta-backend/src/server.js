@@ -14,6 +14,7 @@ const chatRoutes = require('./routes/chat');
 const userRoutes = require('./routes/user');
 const adminRoutes = require('./routes/admin');
 const planRoutes = require('./routes/plans');
+const webhookRoutes = require('./routes/webhooks');
 
 // Import middleware
 const { errorHandler } = require('./middleware/errorHandler');
@@ -145,6 +146,7 @@ app.use('/api/chat', authenticateToken, chatRoutes);
 app.use('/api/user', authenticateToken, userRoutes);
 app.use('/api/admin', authenticateToken, adminRoutes);
 app.use('/api/plans', planRoutes); // Plans route (some endpoints require auth, handled in route)
+app.use('/api/webhooks', webhookRoutes); // Webhook routes for payment providers
 
 // Root endpoint
 app.get('/', (req, res) => {

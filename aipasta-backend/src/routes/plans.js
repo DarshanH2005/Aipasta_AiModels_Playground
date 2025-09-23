@@ -541,6 +541,7 @@ router.get('/my-account', authenticateToken, getMyAccount);
 router.get('/:id', getPlan);
 router.post('/:id/purchase', authenticateToken, purchasePlan);
 router.post('/:id/create-order', authenticateToken, createOrder);
+router.post('/:id/verify-payment', authenticateToken, verifyPayment);
 // Razorpay will POST here. Use raw body parsing for signature verification in server.js mounting, but express allows per-route raw parser as well
 router.post('/webhook', express.raw({ type: 'application/json' }), plansWebhook);
 // Development helper: seed a single plan if none exist. Only available in non-production.
