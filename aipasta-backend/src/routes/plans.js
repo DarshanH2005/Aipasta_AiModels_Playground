@@ -444,27 +444,42 @@ const verifyPayment = async (req, res, next) => {
       return res.status(200).json({ status: 'success', message: 'Already processed', data: { user: snapshot } });
     }
 
-    // Create or update event record (use paymentId as eventId to avoid duplicates)
+    // Create event record if it doesn't exist (handle duplicates gracefully)
+    let webhookEvent;
     try {
-      await WebhookEvent.findOneAndUpdate(
-        { paymentId: payment.id },
-        { 
-          $set: { 
-            provider: 'razorpay', 
-            eventType: 'payment.verify', 
-            eventId: payment.id, // Use paymentId as eventId to ensure uniqueness
-            paymentId: payment.id, 
-            orderId: razorpay_order_id, 
-            payload: payment, 
-            signatureVerified: true 
-          } 
-        },
-        { upsert: true, new: true }
-      );
-      console.log('✅ WebhookEvent created/updated successfully');
+      // First try to find existing event
+      webhookEvent = await WebhookEvent.findOne({ 
+        $or: [
+          { paymentId: payment.id },
+          { provider: 'razorpay', eventId: payment.id }
+        ]
+      });
+      
+      if (!webhookEvent) {
+        // Create new event record
+        webhookEvent = new WebhookEvent({
+          provider: 'razorpay',
+          eventType: 'payment.verify',
+          eventId: payment.id,
+          paymentId: payment.id,
+          orderId: razorpay_order_id,
+          payload: payment,
+          signatureVerified: true
+        });
+        await webhookEvent.save();
+        console.log('✅ New WebhookEvent created successfully');
+      } else {
+        console.log('✅ WebhookEvent already exists, proceeding with verification');
+      }
     } catch (webhookError) {
-      console.log('⚠️ WebhookEvent creation failed (likely duplicate):', webhookError.message);
-      // Continue processing - this is likely a duplicate event which is safe to ignore
+      // Handle duplicate key errors gracefully
+      if (webhookError.code === 11000) {
+        console.log('⚠️ WebhookEvent already exists (duplicate key), continuing...');
+        webhookEvent = await WebhookEvent.findOne({ paymentId: payment.id });
+      } else {
+        console.log('⚠️ WebhookEvent creation failed:', webhookError.message);
+      }
+      // Continue processing - webhook event creation failure shouldn't block payment verification
     }
 
     const paymentInfo = { amount: payment.amount / 100, paymentId: payment.id, status: payment.status };
@@ -493,11 +508,20 @@ const verifyPayment = async (req, res, next) => {
 
     // Mark event processed
     try {
-      await WebhookEvent.findOneAndUpdate(
-        { paymentId: payment.id }, 
-        { $set: { processed: true, processedAt: new Date() } }
-      );
-      console.log('✅ WebhookEvent marked as processed');
+      if (webhookEvent) {
+        await WebhookEvent.findOneAndUpdate(
+          { _id: webhookEvent._id }, 
+          { $set: { processed: true, processedAt: new Date() } }
+        );
+        console.log('✅ WebhookEvent marked as processed');
+      } else {
+        // Try to find and update by paymentId as fallback
+        await WebhookEvent.findOneAndUpdate(
+          { paymentId: payment.id }, 
+          { $set: { processed: true, processedAt: new Date() } }
+        );
+        console.log('✅ WebhookEvent marked as processed (fallback)');
+      }
     } catch (webhookError) {
       console.log('⚠️ Failed to mark WebhookEvent as processed:', webhookError.message);
       // This is not critical for payment processing, continue

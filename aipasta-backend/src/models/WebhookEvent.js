@@ -16,6 +16,7 @@ const webhookEventSchema = new mongoose.Schema({
   collection: 'webhook_events'
 });
 
+// Create a compound unique index on provider and eventId, but only when eventId exists
 webhookEventSchema.index({ provider: 1, eventId: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('WebhookEvent', webhookEventSchema);
