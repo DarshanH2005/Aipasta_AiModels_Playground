@@ -348,11 +348,22 @@ const plansWebhook = async (req, res, next) => {
 // @access  Private
 const verifyPayment = async (req, res, next) => {
   try {
+    console.log('🔍 Verify Payment Request:', {
+      planId: req.params.id,
+      userId: req.user?._id,
+      body: req.body,
+      headers: {
+        'content-type': req.headers['content-type'],
+        'authorization': req.headers.authorization ? 'Bearer [REDACTED]' : 'Missing'
+      }
+    });
+
     const { id } = req.params; // plan id
     const userId = req.user._id;
     const { razorpay_payment_id, razorpay_order_id, razorpay_signature } = req.body;
 
     if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
+      console.error('❌ Missing payment parameters:', { razorpay_payment_id, razorpay_order_id, razorpay_signature });
       return next(new AppError('Missing payment verification parameters', 400));
     }
 
@@ -365,8 +376,16 @@ const verifyPayment = async (req, res, next) => {
     const expectedSignature = hmac.digest('hex');
 
     if (expectedSignature !== razorpay_signature) {
+      console.error('❌ Signature mismatch:', {
+        expected: expectedSignature,
+        received: razorpay_signature,
+        orderId: razorpay_order_id,
+        paymentId: razorpay_payment_id
+      });
       return next(new AppError('Invalid payment signature', 400));
     }
+
+    console.log('✅ Payment signature verified successfully');
 
     const razorpay = getRazorpayInstance();
     if (!razorpay) return next(new AppError('Razorpay not configured', 500));
@@ -456,9 +475,17 @@ const verifyPayment = async (req, res, next) => {
       currentPlan: user.currentPlan
     };
 
+    console.log('✅ Payment verification completed successfully');
     res.status(200).json({ status: 'success', message: 'Payment verified and tokens credited', data: { user: snapshot } });
 
   } catch (error) {
+    console.error('❌ Payment verification error:', {
+      message: error.message,
+      stack: error.stack,
+      planId: req.params.id,
+      userId: req.user?._id,
+      body: req.body
+    });
     next(error);
   }
 };
