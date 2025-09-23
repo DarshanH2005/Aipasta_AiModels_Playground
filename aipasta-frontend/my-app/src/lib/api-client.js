@@ -107,6 +107,11 @@ const getAuthHeaders = () => {
     headers['Authorization'] = `Bearer ${token}`;
   }
   
+  // Add client fingerprint for Razorpay if available
+  if (typeof window !== 'undefined' && window.navigator) {
+    headers['x-client-info'] = window.navigator.userAgent.slice(0, 100);
+  }
+  
   return headers;
 };
 

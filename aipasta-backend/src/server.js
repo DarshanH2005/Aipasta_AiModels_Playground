@@ -37,20 +37,28 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       // Allow Google Identity scripts and Razorpay
-      scriptSrc: ["'self'", 'https://accounts.google.com', ...cspSources],
+      scriptSrc: ["'self'", 'https://accounts.google.com', "'unsafe-eval'", ...cspSources],
       imgSrc: ["'self'", "data:", "https:"],
       connectSrc: [
         "'self'", 
         "https://api.openai.com", 
         "https://api-inference.huggingface.co",
+        "https://*.razorpay.com",
         ...cspSources
       ],
       // Allow Google Identity iframe resources and Razorpay
-      frameSrc: ["'self'", 'https://accounts.google.com', ...cspSources],
-      childSrc: ["'self'", 'https://accounts.google.com']
+      frameSrc: ["'self'", 'https://accounts.google.com', 'https://*.razorpay.com', ...cspSources],
+      childSrc: ["'self'", 'https://accounts.google.com', 'https://*.razorpay.com']
     }
   },
-  crossOriginEmbedderPolicy: false
+  crossOriginEmbedderPolicy: false,
+  // Disable permissions that cause issues
+  permissionsPolicy: {
+    vibrate: ["'none'"],
+    geolocation: ["'none'"],
+    camera: ["'none'"],
+    microphone: ["'none'"]
+  }
 }));
 
 // CORS configuration
@@ -65,12 +73,16 @@ const corsOptions = {
     'Authorization', 
     'X-Requested-With', 
     'x-fingerprint-id',
+    'x-rtb-fingerprint-id',
     'x-client-info',
     'Accept',
-    'Origin'
+    'Origin',
+    'Cache-Control',
+    'Pragma'
   ],
   exposedHeaders: [
     'x-fingerprint-id',
+    'x-rtb-fingerprint-id',
     'x-client-info'
   ]
 };
