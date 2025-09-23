@@ -117,13 +117,26 @@ const PlansModal = ({ isOpen, onClose, onPlanSelect }) => {
         order_id: orderId,
         handler: async function (response) {
           try {
+            // Get fresh auth token (in case it expired during payment)
+            const currentToken = localStorage.getItem('authToken');
+            if (!currentToken) {
+              throw new Error('Authentication token missing. Please login again.');
+            }
+
+            console.log('🔍 Payment verification data:', {
+              payment_id: response.razorpay_payment_id,
+              order_id: response.razorpay_order_id,
+              signature: response.razorpay_signature ? 'Present' : 'Missing',
+              plan_id: plan._id
+            });
+
             // Verify payment with backend
             const verifyUrl = buildApiUrl(`/api/plans/${plan._id}/verify-payment`);
             const verifyRes = await fetch(verifyUrl, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+                'Authorization': `Bearer ${currentToken}`
               },
               body: JSON.stringify({
                 razorpay_payment_id: response.razorpay_payment_id,
@@ -131,9 +144,22 @@ const PlansModal = ({ isOpen, onClose, onPlanSelect }) => {
                 razorpay_signature: response.razorpay_signature
               })
             });
+            console.log('🔍 Verification response status:', verifyRes.status);
+            
+            if (!verifyRes.ok) {
+              const errorText = await verifyRes.text();
+              console.error('❌ Verification failed:', {
+                status: verifyRes.status,
+                statusText: verifyRes.statusText,
+                response: errorText
+              });
+              throw new Error(`Verification failed (${verifyRes.status}): ${errorText}`);
+            }
+
             const verifyResult = await safeParseResponse(verifyRes);
             if (verifyResult && verifyResult.__nonJson) throw new Error('Non-JSON response from verify endpoint');
             if (verifyResult.status === 'success') {
+              console.log('✅ Payment verification successful:', verifyResult);
               if (onPlanSelect) onPlanSelect(verifyResult.data);
               alert(`Payment successful — ${plan.tokens.toLocaleString()} tokens credited.`);
               onClose();
