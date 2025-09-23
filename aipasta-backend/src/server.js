@@ -27,17 +27,26 @@ const app = express();
 app.set('trust proxy', true);
 
 // Security middleware
+const cspSources = process.env.HELMET_CSP_SOURCES 
+  ? process.env.HELMET_CSP_SOURCES.split(' ')
+  : ['https://checkout.razorpay.com', 'https://api.razorpay.com'];
+
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
-      // Allow Google Identity scripts (accounts.google.com) which are used by GSI
-      scriptSrc: ["'self'", 'https://accounts.google.com'],
+      // Allow Google Identity scripts and Razorpay
+      scriptSrc: ["'self'", 'https://accounts.google.com', ...cspSources],
       imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", "https://api.openai.com", "https://api-inference.huggingface.co"],
-      // Allow Google Identity iframe resources
-      frameSrc: ["'self'", 'https://accounts.google.com'],
+      connectSrc: [
+        "'self'", 
+        "https://api.openai.com", 
+        "https://api-inference.huggingface.co",
+        ...cspSources
+      ],
+      // Allow Google Identity iframe resources and Razorpay
+      frameSrc: ["'self'", 'https://accounts.google.com', ...cspSources],
       childSrc: ["'self'", 'https://accounts.google.com']
     }
   },
@@ -47,11 +56,23 @@ app.use(helmet({
 // CORS configuration
 const corsOptions = {
   origin: process.env.NODE_ENV === 'production' 
-    ? [process.env.FRONTEND_URL, 'http://localhost:3000'] || ['http://localhost:3000']
+    ? [process.env.FRONTEND_URL, 'https://aipasta-frontend.vercel.app', 'http://localhost:3000'] 
     : ['http://localhost:3000', 'http://localhost:3001'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With', 
+    'x-fingerprint-id',
+    'x-client-info',
+    'Accept',
+    'Origin'
+  ],
+  exposedHeaders: [
+    'x-fingerprint-id',
+    'x-client-info'
+  ]
 };
 
 app.use(cors(corsOptions));

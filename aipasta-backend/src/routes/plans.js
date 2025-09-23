@@ -372,17 +372,36 @@ const verifyPayment = async (req, res, next) => {
     if (!razorpay) return next(new AppError('Razorpay not configured', 500));
 
     // Fetch payment to confirm status and amount
-    const payment = await razorpay.payments.fetch(razorpay_payment_id);
+    let payment;
+    try {
+      payment = await razorpay.payments.fetch(razorpay_payment_id);
+    } catch (error) {
+      console.error('Failed to fetch payment from Razorpay:', error);
+      return next(new AppError('Failed to verify payment with Razorpay', 500));
+    }
+
     if (!payment || (payment.status !== 'captured' && payment.status !== 'authorized')) {
+      console.warn('Payment not in valid state:', { paymentId: razorpay_payment_id, status: payment?.status });
       return next(new AppError('Payment not captured', 400));
     }
 
     // Fetch order to retrieve notes (planId, userId)
-    const order = await razorpay.orders.fetch(razorpay_order_id);
+    let order;
+    try {
+      order = await razorpay.orders.fetch(razorpay_order_id);
+    } catch (error) {
+      console.error('Failed to fetch order from Razorpay:', error);
+      return next(new AppError('Failed to verify order with Razorpay', 500));
+    }
+
     const planId = order.notes && order.notes.planId;
     const orderUserId = order.notes && order.notes.userId;
 
     if (!planId || !orderUserId || String(orderUserId) !== String(userId) || String(planId) !== String(id)) {
+      console.warn('Order metadata mismatch:', { 
+        planId, orderUserId, expectedUserId: userId, expectedPlanId: id,
+        orderNotes: order.notes 
+      });
       return next(new AppError('Order metadata mismatch', 400));
     }
 
