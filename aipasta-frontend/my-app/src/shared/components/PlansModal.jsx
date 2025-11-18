@@ -3,6 +3,20 @@ import { buildApiUrl } from '../../lib/api-client.js';
 import { useAuth } from '../../contexts/AuthContext.js';
 import { IconCurrency, IconCheck, IconStar, IconBolt, IconShield, IconRocket, IconX } from '@tabler/icons-react';
 
+// Helper for safe response parsing
+async function safeParseResponse(response) {
+  try {
+    const text = await response.text();
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      return { __nonJson: true, text };
+    }
+  } catch (err) {
+    return { __nonJson: true, text: String(err) };
+  }
+}
+
 const PlansModal = ({ isOpen, onClose, onPlanSelect }) => {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -16,21 +30,6 @@ const PlansModal = ({ isOpen, onClose, onPlanSelect }) => {
       loadPlans();
     }
   }, [isOpen]);
-
-  // Local safe JSON parser: read text, detect HTML/dev-overlay, and attempt JSON.parse
-  const safeParseResponse = async (response) => {
-    const text = await response.text();
-    const isHtml = /<\/?html|<!doctype html|<\!DOCTYPE/i.test(text) || response.headers.get('content-type')?.includes('text/html');
-    if (isHtml) {
-      return { __nonJson: true, text };
-    }
-    if (!text) return null;
-    try {
-      return JSON.parse(text);
-    } catch (err) {
-      return { __nonJson: true, text };
-    }
-  };
 
   const loadPlans = async () => {
     try {
@@ -147,13 +146,26 @@ const PlansModal = ({ isOpen, onClose, onPlanSelect }) => {
             console.log('🔍 Verification response status:', verifyRes.status);
             
             if (!verifyRes.ok) {
-              const errorText = await verifyRes.text();
+              let errorMessage = `Verification failed (${verifyRes.status})`;
+              try {
+                const errorJson = await verifyRes.json();
+                errorMessage = errorJson.message || errorJson.error || errorMessage;
+              } catch (e) {
+                // If JSON parse fails, try text
+                try {
+                    const errorText = await verifyRes.text();
+                    errorMessage = errorText || errorMessage;
+                } catch (textErr) {
+                    // Ignore text parse error
+                }
+              }
+              
               console.error('❌ Verification failed:', {
                 status: verifyRes.status,
                 statusText: verifyRes.statusText,
-                response: errorText
+                message: errorMessage
               });
-              throw new Error(`Verification failed (${verifyRes.status}): ${errorText}`);
+              throw new Error(errorMessage);
             }
 
             const verifyResult = await safeParseResponse(verifyRes);
@@ -168,7 +180,7 @@ const PlansModal = ({ isOpen, onClose, onPlanSelect }) => {
             }
           } catch (err) {
             console.error('Verification error:', err);
-            alert('Payment processed but verification failed. Our team will reconcile this.');
+            alert(`Payment verification failed: ${err.message}`);
           }
         },
         prefill: {
