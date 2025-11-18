@@ -1,5 +1,5 @@
-// Use Node.js built-in fetch (available in Node 18+)
-// const fetch = require('node-fetch');
+// Use Node.js built-in fetch (available in Node 18+) or polyfill
+const fetch = require('node-fetch');
 
 class OpenRouterService {
   constructor(apiKey) {
@@ -15,7 +15,8 @@ class OpenRouterService {
     this.headers = {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'http://localhost:3000',
+      'HTTP-Referer': process.env.FRONTEND_URL || 'http://localhost:3000', // Site URL for rankings on openrouter.ai
+      'X-Title': 'AI Pasta', // Site title for rankings on openrouter.ai
       'User-Agent': 'AI-Pasta/1.0.0'
     };
     
@@ -135,10 +136,9 @@ class OpenRouterService {
         top_p: options.top_p || 1,
         frequency_penalty: options.frequency_penalty || 0,
         presence_penalty: options.presence_penalty || 0,
-        // Add transforms to utilize free daily requests first
-        transforms: ["middle-out"],
-        // Route preference to utilize free daily limits before paid credits
-        route: "fallback",
+        // Remove transforms and route to avoid issues with some models
+        // transforms: ["middle-out"],
+        // route: "fallback",
         ...options
       };
 

@@ -140,14 +140,15 @@ const handleRazorpayWebhook = async (req, res) => {
 
     // Verify signature
     const signature = req.headers['x-razorpay-signature'];
-    const body = req.body;
+    // Use rawBody if available (captured in server.js), otherwise fallback to body
+    const bodyToVerify = req.rawBody || req.body;
 
-    if (!body) {
+    if (!bodyToVerify) {
       console.error('Webhook: Missing request body');
       return res.status(400).json({ error: 'Missing request body' });
     }
 
-    if (!verifyWebhookSignature(body, signature, secret)) {
+    if (!verifyWebhookSignature(bodyToVerify, signature, secret)) {
       console.warn('Webhook: Invalid signature', { 
         received: signature?.substring(0, 10) + '...',
         timestamp: new Date().toISOString()

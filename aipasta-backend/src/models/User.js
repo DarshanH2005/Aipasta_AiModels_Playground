@@ -296,7 +296,41 @@ userSchema.methods.deductTokens = async function(amount, modelType = 'free', opt
     // Save transactions array (keep it capped)
     this.tokens.transactions = txs.slice(0, 200);
 
-    await this.save();
+    // Retry save operation in case of version conflicts
+    let saveAttempts = 0;
+    const maxSaveAttempts = 3;
+    
+    while (saveAttempts < maxSaveAttempts) {
+      try {
+        await this.save();
+        break; // Success, exit retry loop
+      } catch (saveErr) {
+        saveAttempts++;
+        
+        // Check if it's a version conflict or duplicate key error
+        if (saveErr.name === 'VersionError' || saveErr.code === 11000 || saveErr.message.includes('version')) {
+          if (saveAttempts >= maxSaveAttempts) {
+            console.error(`❌ Failed to save user tokens after ${maxSaveAttempts} attempts due to version conflicts`);
+            throw new Error(`Database version conflict after ${maxSaveAttempts} attempts`);
+          }
+          
+          console.warn(`⚠️ Version conflict during token deduction (attempt ${saveAttempts}/${maxSaveAttempts}), retrying...`);
+          
+          // Reload the document and retry with fresh data
+          await this.reload();
+          
+          // Recalculate based on fresh data
+          this.tokens.balance = Math.max(0, (this.tokens.freeTokens || 0) + (this.tokens.paidTokens || 0));
+          this.credits = this.tokens.balance;
+          
+          // Wait before retry
+          await new Promise(resolve => setTimeout(resolve, 50 * saveAttempts));
+        } else {
+          // Different error, don't retry
+          throw saveErr;
+        }
+      }
+    }
 
     if (remaining > 0) {
       // Not enough tokens to cover full amount

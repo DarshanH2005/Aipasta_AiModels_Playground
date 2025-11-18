@@ -132,8 +132,8 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
       });
     });
     
-    // Debug logging
-    if (conversationTurns.length > 0) {
+    // Debug logging (throttled to reduce console spam)
+    if (conversationTurns.length > 0 && Math.random() < 0.1) {
       console.log(`🔄 Processing ${conversationTurns.length} conversation turns:`, 
         conversationTurns.map(turn => ({
           userContent: turn.userMessage.content.substring(0, 50) + '...',
@@ -703,21 +703,38 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
     setInputValue('');
     setAttachedFiles([]);
 
-    // Start streaming responses from all models in parallel
-    const streamPromises = selectedModels.map(async (model, index) => {
+    // Process models sequentially to avoid backend concurrency locks
+    if (selectedModels.length > 1) {
+      toast.info(`🚀 Processing with ${selectedModels.length} models (staggered for optimal performance)...`);
+    }
+    
+    const streamPromises = [];
+    
+    // Process each model one by one with proper delays
+    for (let index = 0; index < selectedModels.length; index++) {
+      const model = selectedModels[index];
       const responseId = `response-${Date.now()}-${index}`;
       
+      // Create a sequential promise that waits for its turn
+      const modelPromise = (async () => {
         try {
-        // Initialize response immediately
-        initializeResponse(responseId, {
-          model: `${model.provider}/${model.name}`,
-          provider: model.provider,
-          tokens: model.pricing?.input > 0 ? 10 : 1 // Token cost instead of cost
-        });
+          // Small stagger to avoid overwhelming the backend
+          if (index > 0) {
+            await new Promise(resolve => setTimeout(resolve, 200 * index)); // 200ms stagger per model
+          }
+          
+          // Initialize response after delay
+          initializeResponse(responseId, {
+            model: `${model.provider}/${model.name}`,
+            provider: model.provider,
+            tokens: model.pricing?.input > 0 ? 10 : 1 // Token cost instead of cost
+          });
 
-        // Use backend API through streamModelResponse (no direct OpenRouter calls)
-        try {
-          await streamModelResponse(
+          console.log(`🚀 Starting request for model ${index + 1}/${selectedModels.length}: ${model.name}`);
+
+          // Use backend API through streamModelResponse (no direct OpenRouter calls)
+          try {
+            await streamModelResponse(
             model, 
             currentInput, 
             currentFiles, 
@@ -725,7 +742,8 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
               updateResponse(responseId, chunk, isComplete);
             },
             (finalResponse) => {
-              console.log(`✅ Backend API response from ${model.name} completed`);
+              console.log(`✅ Model ${index + 1}/${selectedModels.length} (${model.name}) completed successfully`);
+              toast.success(`✅ ${model.name} completed`);
               // The final chunk is already passed via onChunk with isLastChunk=true,
               // so we avoid calling updateResponse again here to prevent double-appending
               // a trailing empty chunk which could race with the last chunk and
@@ -761,7 +779,11 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
               
               // Normalize error message access (error may be plain object or Error)
               const msg = error?.message || error?.messageText || error?.msg || (typeof error === 'string' ? error : JSON.stringify(error));
-              toast.error(`Failed to get response from ${model.name}: ${msg}`);
+              console.error(`❌ Model ${index + 1}/${selectedModels.length} (${model.name}) failed:`, msg);
+              // Only show toast for non-rate-limit errors to reduce spam
+              if (!msg.includes('Rate limit') && !msg.includes('429')) {
+                toast.error(`${model.name}: ${msg}`);
+              }
               // If the error contains usage info (some backends may return partial usage), apply it
               try {
                 const maybeUsage = error?.raw?.data?.usage || error?.raw?.usage || error?.usage || null;
@@ -779,18 +801,21 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
             sessionId,
             false // Use backend, not local session
           );
-        } catch (streamError) {
-          // Additional safety net: catch any throws that escape from streamModelResponse
-          console.error(`❌ Unexpected throw from streamModelResponse for ${model.name}:`, streamError);
-          setResponseError(responseId, streamError);
-          toast.error(`Failed to get response from ${model.name}: ${streamError.message || streamError}`);
+          } catch (streamError) {
+            // Additional safety net: catch any throws that escape from streamModelResponse
+            console.error(`❌ Unexpected throw from streamModelResponse for ${model.name}:`, streamError);
+            setResponseError(responseId, streamError);
+            toast.error(`Failed to get response from ${model.name}: ${streamError.message || streamError}`);
+          }
+        } catch (outerError) {
+          console.error(`Outer error for ${model.name}:`, outerError);
+          const responseId = `response-${Date.now()}-${selectedModels.indexOf(model)}`;
+          updateResponse(responseId, `Error: ${outerError.message}`, true, true);
         }
-      } catch (outerError) {
-        console.error(`Outer error for ${model.name}:`, outerError);
-        const responseId = `response-${Date.now()}-${selectedModels.indexOf(model)}`;
-        updateResponse(responseId, `Error: ${outerError.message}`, true, true);
-      }
-    });
+      })();
+      
+      streamPromises.push(modelPromise);
+    }
 
     try {
       // Use Promise.allSettled to prevent Next.js error overlay from appearing
@@ -801,15 +826,43 @@ function ChatPageContent({ open, setOpen, locked, setLocked, hasFirstMessageSent
       const failed = results.filter(r => r.status === 'rejected').length;
       
       if (successful > 0) {
-        toast.success(`${successful} response${successful === 1 ? '' : 's'} completed${failed > 0 ? ` (${failed} failed)` : ''}`);
+        const totalModels = selectedModels.length;
+        if (successful === totalModels) {
+          toast.success(`🎉 All ${totalModels} model${totalModels === 1 ? '' : 's'} completed successfully!`);
+        } else {
+          toast.success(`✅ ${successful}/${totalModels} model${totalModels === 1 ? '' : 's'} completed ${failed > 0 ? `(${failed} failed)` : ''}`);
+        }
       } else if (failed > 0) {
-        toast.error('All responses failed');
+        toast.error(`❌ All ${selectedModels.length} model${selectedModels.length === 1 ? '' : 's'} failed`);
       }
     } catch (error) {
       console.error('Unexpected error in streaming promises:', error);
       toast.error('Unexpected error occurred');
     } finally {
       setIsSubmitting(false);
+      
+      // Force clear any remaining streaming responses to prevent stuck "Processing..." state
+      setTimeout(() => {
+        clearResponses();
+        console.log('🧹 Cleared all streaming responses to prevent stuck states');
+      }, 3000);
+      
+      // Only refresh from database if there were actual errors or if no responses were received
+      // This prevents annoying refreshes on successful completions
+      const hasErrors = allResponses.some(r => r.error);
+      const hasNoContent = allResponses.length === 0;
+      
+      if (currentSessionId && (hasErrors || hasNoContent)) {
+        console.log('🔄 Refreshing messages from database due to errors or missing content...');
+        setTimeout(async () => {
+          try {
+            await handleLoadChat(currentSessionId);
+            console.log('✅ Messages refreshed from database successfully');
+          } catch (error) {
+            console.error('Failed to refresh messages:', error);
+          }
+        }, 4000);
+      }
     }
   };
 

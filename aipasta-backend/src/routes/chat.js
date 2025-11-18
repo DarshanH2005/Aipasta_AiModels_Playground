@@ -15,8 +15,109 @@ console.log('🔑 Actual API Key (first 15 chars):', process.env.OPENROUTER_API_
 const openRouterService = new OpenRouterService(process.env.OPENROUTER_API_KEY);
 const huggingFaceService = new HuggingFaceService(process.env.HUGGINGFACE_API_KEY);
 
+// Fallback models for when primary models are rate limited
+const FREE_MODEL_FALLBACKS = [
+  'google/gemini-2.0-flash-exp:free',
+  'meta-llama/llama-3.2-3b-instruct:free',
+  'mistralai/mistral-7b-instruct:free',
+  'qwen/qwen-2-7b-instruct:free',
+  'microsoft/phi-3-mini-128k-instruct:free'
+];
+
 // Rate limiting for chat endpoints
 const chatRateLimit = rateLimitByUser(50, 15 * 60 * 1000); // 50 requests per 15 minutes per user
+
+// Enhanced locking to allow concurrent model requests for same message
+const chatLocks = new Map(); // userId -> { message, timestamp, requestCount }
+
+// Add a brief delay to reduce race conditions in rapid concurrent requests
+const LOCK_ACQUISITION_DELAY = 10; // 10ms delay to reduce race conditions
+
+const acquireChatLock = async (userId, message) => {
+  const userIdStr = userId.toString();
+  
+  // Add small delay to reduce race conditions
+  await new Promise(resolve => setTimeout(resolve, LOCK_ACQUISITION_DELAY));
+  
+  const currentLock = chatLocks.get(userIdStr);
+  
+  // Normalize message to handle potential whitespace differences
+  const normalizedMessage = message ? message.trim() : '';
+  const currentNormalizedMessage = currentLock?.message ? currentLock.message.trim() : '';
+  
+  console.log('🔒 Lock Debug:', { 
+    userIdStr, 
+    message: normalizedMessage, 
+    currentLock: currentLock ? { 
+      message: currentNormalizedMessage, 
+      requestCount: currentLock.requestCount,
+      age: Date.now() - currentLock.timestamp
+    } : 'none',
+    messageMatch: normalizedMessage === currentNormalizedMessage
+  });
+  
+  if (!currentLock) {
+    // No existing lock, create new one
+    chatLocks.set(userIdStr, { message: normalizedMessage, timestamp: Date.now(), requestCount: 1 });
+    console.log('✅ New lock created');
+    return true;
+  }
+  
+  // If same message, allow concurrent processing (for multiple models)
+  if (currentNormalizedMessage === normalizedMessage) {
+    currentLock.requestCount++;
+    currentLock.message = normalizedMessage; // Update with normalized version
+    console.log('✅ Same message, concurrent allowed. New count:', currentLock.requestCount);
+    return true;
+  }
+  
+  // Different message, check if lock is too old (reduce timeout to 15 seconds for faster recovery)
+  if (Date.now() - currentLock.timestamp > 15000) {
+    chatLocks.set(userIdStr, { message: normalizedMessage, timestamp: Date.now(), requestCount: 1 });
+    console.log('✅ Old lock expired, new lock created');
+    return true;
+  }
+  
+  console.log('❌ Different message and lock is recent', { 
+    current: currentNormalizedMessage, 
+    new: normalizedMessage,
+    lockAge: Date.now() - currentLock.timestamp
+  });
+  return false; // Different message and lock is recent
+};
+
+const releaseChatLock = (userId, message) => {
+  const userIdStr = userId.toString();
+  const currentLock = chatLocks.get(userIdStr);
+  
+  // Normalize message to match acquisition normalization
+  const normalizedMessage = message ? message.trim() : '';
+  
+  console.log('🔓 Release Lock Debug:', { 
+    userIdStr, 
+    message: normalizedMessage, 
+    currentLock: currentLock ? { 
+      message: currentLock.message, 
+      requestCount: currentLock.requestCount 
+    } : 'none' 
+  });
+  
+  if (currentLock && currentLock.message === normalizedMessage) {
+    currentLock.requestCount--;
+    console.log('🔓 Lock count decremented to:', currentLock.requestCount);
+    if (currentLock.requestCount <= 0) {
+      chatLocks.delete(userIdStr);
+      console.log('🔓 Lock completely released');
+    }
+  } else {
+    console.log('🔓 No matching lock found - trying force cleanup for old locks');
+    // Force cleanup of any old locks (older than 15 seconds)
+    if (currentLock && Date.now() - currentLock.timestamp > 15000) {
+      chatLocks.delete(userIdStr);
+      console.log('🔓 Force released old lock');
+    }
+  }
+};
 
 // @desc    Create new chat thread/session
 // @route   POST /api/chat/sessions
@@ -110,14 +211,22 @@ const createChatThread = async (req, res, next) => {
 // @route   POST /api/chat
 // @access  Private
 const sendChatMessage = async (req, res, next) => {
+  const userId = req.user?._id;
+  
+  const { message, modelId, sessionId, options = {} } = req.body;
+
+  // Acquire lock to prevent concurrent requests from same user (but allow same message + different models)
+  const lockAcquired = await acquireChatLock(userId, message);
+  if (!lockAcquired) {
+    return next(new AppError('Please wait for your previous message to complete before sending another.', 429));
+  }
+  
   try {
     console.log('🚀 Chat API called:', {
       body: req.body,
       user: req.user ? { id: req.user._id, email: req.user.email, credits: req.user.credits } : 'No user',
       hasAuthHeader: !!req.headers.authorization
     });
-
-    const { message, modelId, sessionId, options = {} } = req.body;
 
     // Validate required fields
     if (!message || !message.trim()) {
@@ -272,9 +381,13 @@ const sendChatMessage = async (req, res, next) => {
     
     // Note: Final token deduction happens after AI response based on actual usage
 
-    // Create user message with proper messageId
+    // Create user message with proper messageId and ensure chronological order
     const userMessageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     console.log(`💬 Creating user message with sessionId: ${session.sessionId} for session _id: ${session._id}`);
+    
+    // Add a small delay to ensure createdAt timestamps are properly ordered
+    // This prevents issues when multiple requests come in rapid succession
+    await new Promise(resolve => setTimeout(resolve, 10));
     
     const userMessage = await ChatMessage.create({
       sessionId: session.sessionId, // Use session.sessionId instead of session._id
@@ -293,33 +406,29 @@ const sendChatMessage = async (req, res, next) => {
       }
     });
 
-    // Get conversation history for context
-    const conversationHistory = await ChatMessage.find({ sessionId: session.sessionId })
+    // Get conversation history for context (excluding the just-created user message to avoid duplicates)
+    const conversationHistory = await ChatMessage.find({ 
+      sessionId: session.sessionId,
+      _id: { $ne: userMessage._id } // Exclude the message we just created
+    })
       .sort({ createdAt: 1 })
-      .limit(20); // Limit context to last 20 messages
+      .limit(19); // Limit to 19 to make room for current message
 
-    // Prepare messages for AI service
+    // Prepare messages for AI service in proper chronological order
     const messages = conversationHistory.map(msg => ({
       role: msg.role,
       content: msg.content
     }));
 
-    // Add the current user message if it's not already in the conversation history
-    const currentUserMessage = { role: 'user', content: message };
-    if (messages.length === 0 || messages[messages.length - 1].content !== message) {
-      messages.push(currentUserMessage);
-    }
-
-    // Ensure we have at least one message
-    if (messages.length === 0) {
-      messages.push(currentUserMessage);
-    }
+    // Add the current user message at the end (most recent)
+    messages.push({ role: 'user', content: message });
 
     console.log(`📝 Sending ${messages.length} messages to AI service:`, messages.map((msg, i) => `${i+1}. ${msg.role}: ${msg.content.substring(0, 50)}...`));
 
     let aiResponse;
     let usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
     let cost = { usd: 0, inr: 0 };
+    let finalModelId = modelId; // Track the actual model used (may differ due to fallbacks)
     const startTime = Date.now();
     
     // Route to appropriate AI service based on provider (or default to OpenRouter for direct API)
@@ -331,14 +440,65 @@ const sendChatMessage = async (req, res, next) => {
         console.log('🔄 Calling OpenRouter service with:', { modelId, messagesCount: messages.length });
         console.log('🔑 Service has API key:', openRouterService.apiKey ? 'YES' : 'NO');
         
-        const response = await openRouterService.createChatCompletion(modelId, messages, {
-          temperature: options.temperature || 0.7,
-          max_tokens: options.max_tokens || 1000,
-          top_p: options.top_p || 0.9,
-          top_k: options.top_k,
-          frequency_penalty: options.frequency_penalty,
-          presence_penalty: options.presence_penalty
-        });
+        let response;
+        let finalModelId = modelId;
+        let attemptedModels = [modelId];
+        
+        // Try the requested model first, then fallback models if rate limited
+        const modelsToTry = modelType === 'free' ? [modelId, ...FREE_MODEL_FALLBACKS] : [modelId];
+        
+        for (const tryModelId of modelsToTry) {
+          try {
+            console.log(`🎯 Attempting model: ${tryModelId}`);
+            
+            response = await openRouterService.createChatCompletion(tryModelId, messages, {
+              temperature: options.temperature || 0.7,
+              max_tokens: options.max_tokens || 1000,
+              top_p: options.top_p || 0.9,
+              top_k: options.top_k,
+              frequency_penalty: options.frequency_penalty,
+              presence_penalty: options.presence_penalty
+            });
+            
+            finalModelId = tryModelId;
+            if (tryModelId !== modelId) {
+              console.log(`✅ Fallback successful: ${modelId} → ${tryModelId}`);
+            }
+            break; // Success! Exit the retry loop
+            
+          } catch (modelError) {
+            attemptedModels.push(tryModelId);
+            console.log(`❌ Model ${tryModelId} failed:`, modelError.message);
+            
+            // If it's not a rate limit or provider error, don't try other models
+            const isRetryable = 
+              modelError.message?.includes('rate-limited') || 
+              modelError.message?.includes('Too Many Requests') || 
+              modelError.message?.includes('429') ||
+              modelError.message?.includes('Provider returned error') ||
+              modelError.message?.includes('502') ||
+              modelError.message?.includes('503') ||
+              modelError.message?.includes('unavailable') ||
+              modelError.message?.includes('upstream') ||
+              modelError.message?.includes('not a valid model ID') ||
+              modelError.message?.includes('400');
+
+            if (!isRetryable) {
+              throw modelError; // Re-throw non-retryable errors
+            }
+            
+            // Continue to next model if rate limited or provider error
+            console.log(`⏩ Error on ${tryModelId} (${modelError.message}), trying next fallback...`);
+            
+            // Add a small delay before trying the next model to avoid hammering the API
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        }
+        
+        // If all models failed, throw the last error
+        if (!response) {
+          throw new Error(`All available models failed. Attempted: ${attemptedModels.join(', ')}. Last error: ${attemptedModels.length > 0 ? 'Check logs' : 'Unknown'}`);
+        }
 
         aiResponse = response.choices[0]?.message?.content || 'No response generated';
         
@@ -364,6 +524,19 @@ const sendChatMessage = async (req, res, next) => {
             cost.inr = cost.usd * 83;
           }
         }
+
+        console.log('✅ OpenRouter API successful response:', {
+          choices: response.choices?.length || 0,
+          usage: response.usage,
+          model: response.model || finalModelId,
+          actualModelUsed: finalModelId,
+          requestedModel: req.body.modelId, // Original requested model
+          fallbackUsed: finalModelId !== req.body.modelId,
+          dailyLimitUsed: response.dailyLimitUsed || false,
+          creditsCharged: response.creditsCharged || 0
+        });
+        
+        // Note: modelId remains as requested, finalModelId is used for actual model tracking
 
       } else if (provider === 'Hugging Face') {
         const response = await huggingFaceService.createTextGeneration(modelId, message, {
@@ -397,10 +570,21 @@ const sendChatMessage = async (req, res, next) => {
         stack: error?.stack
       });
 
+      // Check if it's a rate limiting error specifically
+      if (error?.message?.includes('rate-limited') || error?.message?.includes('Too Many Requests') || error?.message?.includes('429')) {
+        const providerErr = new AppError('The selected AI model is experiencing high demand. We automatically tried backup models. Please refresh and try again, or select a different model.', 429);
+        providerErr.code = 'RATE_LIMITED';
+        providerErr.provider = provider || (model && model.provider) || 'AI provider';
+        providerErr.retryAfter = 30; // Suggest retry after 30 seconds
+        providerErr.suggestion = 'Try refreshing the page or selecting a different AI model';
+        return next(providerErr);
+      }
+
       // Return a friendly, non-fatal error to the client with structured metadata so the frontend
       // can surface a helpful message and optionally retry or fallback.
       const providerName = provider || (model && model.provider) || 'AI provider';
-      const providerErr = new AppError(`AI provider (${providerName}) temporarily unavailable. Please try again in a moment.`, 503);
+      // Include the actual error message for debugging purposes
+      const providerErr = new AppError(`AI provider (${providerName}) error: ${error.message}`, 503);
       providerErr.code = 'PROVIDER_ERROR';
       providerErr.provider = providerName;
       return next(providerErr);
@@ -417,25 +601,49 @@ const sendChatMessage = async (req, res, next) => {
       - Model type: ${modelType}
       - Using internal cost for deduction`);
     
-    // Check if user has enough tokens for internal cost
-    const currentUser = await require('../models/User').findById(userId);
-    if (currentUser.tokens.balance < internalTokenCost) {
-      // Still save the AI response but warn about token shortage
-      console.warn(`⚠️ Token shortage: Request needs ${internalTokenCost} tokens, user has ${currentUser.tokens.balance} tokens`);
-      
-      // Deduct whatever tokens they have left and set balance to 0
-      if (currentUser.tokens.balance > 0) {
-        const remainingToDeduct = currentUser.tokens.balance;
-        const res = await currentUser.deductTokens(remainingToDeduct, modelType);
-        console.log(`💰 Deducted remaining ${res.deducted || remainingToDeduct} tokens from user ${userId}. Balance now: ${res.balance}`);
+    // Check if user has enough tokens for internal cost with retry logic for database conflicts
+    let currentUser;
+    let retryCount = 0;
+    const maxRetries = 3;
+    
+    while (retryCount < maxRetries) {
+      try {
+        currentUser = await require('../models/User').findById(userId);
+        
+        if (currentUser.tokens.balance < internalTokenCost) {
+          // Still save the AI response but warn about token shortage
+          console.warn(`⚠️ Token shortage: Request needs ${internalTokenCost} tokens, user has ${currentUser.tokens.balance} tokens`);
+          
+          // Deduct whatever tokens they have left and set balance to 0
+          if (currentUser.tokens.balance > 0) {
+            const remainingToDeduct = currentUser.tokens.balance;
+            const res = await currentUser.deductTokens(remainingToDeduct, modelType);
+            console.log(`💰 Deducted remaining ${res.deducted || remainingToDeduct} tokens from user ${userId}. Balance now: ${res.balance}`);
+          }
+          
+          // Continue with response but include warning
+          console.log(`⚠️ User ${userId} has insufficient tokens but response will be delivered`);
+        } else {
+          // Deduct the internal fixed token cost (corrected logic)
+          const res = await currentUser.deductTokens(internalTokenCost, modelType);
+          console.log(`💰 Deducted ${res.deducted || internalTokenCost} internal tokens from user ${userId}. Remaining: ${res.balance}`);
+        }
+        break; // Success, exit retry loop
+        
+      } catch (deductError) {
+        retryCount++;
+        console.error(`Credits deduction error (attempt ${retryCount}/${maxRetries}):`, deductError.message || deductError);
+        
+        if (retryCount >= maxRetries) {
+          console.error(`❌ Failed to deduct tokens after ${maxRetries} attempts, continuing without deduction`);
+          // Continue with the response even if token deduction failed
+          // This ensures the user still gets their AI response
+          break;
+        }
+        
+        // Wait a bit before retrying to avoid rapid retries
+        await new Promise(resolve => setTimeout(resolve, 100 * retryCount));
       }
-      
-      // Continue with response but include warning
-      console.log(`⚠️ User ${userId} has insufficient tokens but response will be delivered`);
-    } else {
-      // Deduct the internal fixed token cost (corrected logic)
-      const res = await currentUser.deductTokens(internalTokenCost, modelType);
-      console.log(`💰 Deducted ${res.deducted || internalTokenCost} internal tokens from user ${userId}. Remaining: ${res.balance}`);
     }
 
     // Refresh req.user to reflect the latest token and credits balance
@@ -453,6 +661,9 @@ const sendChatMessage = async (req, res, next) => {
     const aiMessageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     console.log(`🤖 Creating AI message with sessionId: ${session.sessionId} for session _id: ${session._id}`);
     
+    // Add small delay to ensure proper chronological order of messages
+    await new Promise(resolve => setTimeout(resolve, 10));
+    
     const aiMessage = await ChatMessage.create({
       sessionId: session.sessionId, // Use session.sessionId instead of session._id
       userId,
@@ -460,7 +671,7 @@ const sendChatMessage = async (req, res, next) => {
       role: 'assistant',
       content: aiResponse,
       model: {
-        id: modelId,
+        id: finalModelId || modelId,
         name: model ? model.name : 'Unknown Model',
         provider: model ? model.provider : 'Direct API'
       },
@@ -580,6 +791,11 @@ const sendChatMessage = async (req, res, next) => {
       timestamp: new Date().toISOString()
     });
     next(error);
+  } finally {
+    // Always release the lock, even if there was an error
+    if (userId && message) {
+      releaseChatLock(userId, message);
+    }
   }
 };
 
@@ -937,29 +1153,40 @@ const getChatMessages = async (req, res, next) => {
       });
     }
 
-    // Group messages into conversation turns (user-assistant pairs)
+    // Group messages into conversation turns maintaining proper order
     const conversationTurns = [];
-    for (let i = 0; i < messages.length; i += 2) {
-      const userMessage = messages[i];
-      const assistantMessage = messages[i + 1];
-      
-      if (userMessage) {
-        conversationTurns.push({
+    let currentTurn = null;
+    
+    for (const message of messages) {
+      if (message.role === 'user') {
+        // Start a new turn
+        if (currentTurn) {
+          conversationTurns.push(currentTurn);
+        }
+        currentTurn = {
           user: {
-            id: userMessage._id,
-            content: userMessage.content,
-            timestamp: userMessage.createdAt
+            id: message._id,
+            content: message.content,
+            timestamp: message.createdAt
           },
-          assistant: assistantMessage ? {
-            id: assistantMessage._id,
-            content: assistantMessage.content,
-            model: assistantMessage.modelId,
-            usage: assistantMessage.usage,
-            cost: assistantMessage.cost,
-            timestamp: assistantMessage.createdAt
-          } : null
-        });
+          assistant: null
+        };
+      } else if (message.role === 'assistant' && currentTurn) {
+        // Add assistant response to current turn
+        currentTurn.assistant = {
+          id: message._id,
+          content: message.content,
+          model: message.model?.id || message.modelId,
+          usage: message.usage,
+          cost: message.cost,
+          timestamp: message.createdAt
+        };
       }
+    }
+    
+    // Add the last turn if it exists
+    if (currentTurn) {
+      conversationTurns.push(currentTurn);
     }
 
     const totalMessages = await ChatMessage.countDocuments({ sessionId: actualSessionId });
