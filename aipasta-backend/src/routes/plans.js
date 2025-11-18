@@ -396,12 +396,12 @@ const verifyPayment = async (req, res, next) => {
       payment = await razorpay.payments.fetch(razorpay_payment_id);
     } catch (error) {
       console.error('Failed to fetch payment from Razorpay:', error);
-      return next(new AppError('Failed to verify payment with Razorpay', 500));
+      return next(new AppError(`Failed to verify payment with Razorpay: ${error.message}`, 500));
     }
 
     if (!payment || (payment.status !== 'captured' && payment.status !== 'authorized')) {
       console.warn('Payment not in valid state:', { paymentId: razorpay_payment_id, status: payment?.status });
-      return next(new AppError('Payment not captured', 400));
+      return next(new AppError(`Payment not captured (Status: ${payment?.status})`, 400));
     }
 
     // Fetch order to retrieve notes (planId, userId)
@@ -410,7 +410,7 @@ const verifyPayment = async (req, res, next) => {
       order = await razorpay.orders.fetch(razorpay_order_id);
     } catch (error) {
       console.error('Failed to fetch order from Razorpay:', error);
-      return next(new AppError('Failed to verify order with Razorpay', 500));
+      return next(new AppError(`Failed to verify order with Razorpay: ${error.message}`, 500));
     }
 
     const planId = order.notes && order.notes.planId;
@@ -489,7 +489,7 @@ const verifyPayment = async (req, res, next) => {
       console.log('✅ Tokens added to user successfully');
     } catch (tokenError) {
       console.error('❌ Failed to add tokens to user:', tokenError.message);
-      throw tokenError; // This is critical, re-throw
+      return next(new AppError(`Failed to credit tokens: ${tokenError.message}`, 500));
     }
 
     try {
@@ -548,7 +548,11 @@ const verifyPayment = async (req, res, next) => {
       userId: req.user?._id,
       body: req.body
     });
-    next(error);
+    // Ensure we return an AppError so the message is visible in production
+    if (error instanceof AppError) {
+      return next(error);
+    }
+    return next(new AppError(`Payment verification failed: ${error.message}`, 500));
   }
 };
 
