@@ -1954,9 +1954,11 @@ export default function ChatPage() {
   const handlePlanSelect = useCallback(
     (purchaseData) => {
       console.log("Plan selected:", purchaseData);
-      // Update user's token balance (this should be handled by the backend response)
+      // Safely read plan name and token balance from response
+      const planName = purchaseData?.plan?.name || 'plan';
+      const tokenBalance = purchaseData?.user?.tokens?.balance ?? purchaseData?.newTokenBalance ?? '';
       toast.success(
-        `Successfully purchased ${purchaseData.plan.name}! You now have ${purchaseData.newTokenBalance} tokens.`,
+        `Successfully purchased ${planName}!${tokenBalance ? ` You now have ${tokenBalance.toLocaleString()} tokens.` : ''}`,
       );
       setShowPlansModal(false);
     },

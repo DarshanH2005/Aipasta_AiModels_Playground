@@ -441,7 +441,7 @@ const verifyPayment = async (req, res, next) => {
         },
         currentPlan: user.currentPlan
       };
-      return res.status(200).json({ status: 'success', message: 'Already processed', data: { user: snapshot } });
+      return res.status(200).json({ status: 'success', message: 'Already processed', data: { plan: { id: plan._id, name: plan.displayName, tokens: plan.tokens, price: plan.priceINR }, user: snapshot } });
     }
 
     // Create event record if it doesn't exist (handle duplicates gracefully)
@@ -538,7 +538,25 @@ const verifyPayment = async (req, res, next) => {
     };
 
     console.log('✅ Payment verification completed successfully');
-    res.status(200).json({ status: 'success', message: 'Payment verified and tokens credited', data: { user: snapshot } });
+    res.status(200).json({
+      status: 'success',
+      message: 'Payment verified and tokens credited',
+      data: {
+        plan: {
+          id: plan._id,
+          name: plan.displayName,
+          tokens: plan.tokens,
+          price: plan.priceINR
+        },
+        user: snapshot,
+        payment: {
+          paymentId: razorpay_payment_id,
+          orderId: razorpay_order_id,
+          amount: payment.amount / 100,
+          status: payment.status
+        }
+      }
+    });
 
   } catch (error) {
     console.error('❌ Payment verification error:', {
