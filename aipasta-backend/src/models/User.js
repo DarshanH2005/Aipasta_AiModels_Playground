@@ -123,7 +123,7 @@ const userSchema = new mongoose.Schema({
     paymentId: String, // Razorpay payment ID
     status: {
       type: String,
-      enum: ['pending', 'completed', 'failed', 'refunded'],
+      enum: ['pending', 'completed', 'failed', 'refunded', 'captured', 'authorized'],
       default: 'pending'
     }
   }],

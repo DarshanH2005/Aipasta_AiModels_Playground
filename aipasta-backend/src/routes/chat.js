@@ -213,6 +213,20 @@ const createChatThread = async (req, res, next) => {
 const sendChatMessage = async (req, res, next) => {
   const userId = req.user?._id;
   
+  // DEBUG LOGGING
+  const fs = require('fs');
+  const logLine = `[${new Date().toISOString()}] REQ: ${JSON.stringify({ 
+      userId: userId?.toString(), 
+      sessionId: req.body.sessionId, 
+      message: req.body.message?.substring(0,20) 
+  })}\n`;
+  try { fs.appendFileSync('debug_chat.log', logLine); } catch (e) {}
+
+  // Declare variables outside try/catch for access in catch block & deduplication
+  let session = null;
+  let userMessage = null;
+  let model = null;
+  
   const { message, modelId, sessionId, options = {} } = req.body;
 
   // Acquire lock to prevent concurrent requests from same user (but allow same message + different models)
@@ -267,7 +281,7 @@ const sendChatMessage = async (req, res, next) => {
     }
 
     // Get or validate model (optional - allow direct API integration)
-    let model = null;
+    model = null;
     try {
       model = await AIModel.findOne({ modelId });
       if (model && !model.isAvailable) {
@@ -293,7 +307,6 @@ const sendChatMessage = async (req, res, next) => {
     }
 
     // Get or create chat session
-    let session;
     if (sessionId) {
       session = await ChatSession.findOne({ _id: sessionId, userId });
       if (!session) {
@@ -308,8 +321,8 @@ const sendChatMessage = async (req, res, next) => {
         title: message.substring(0, 50) + (message.length > 50 ? '...' : ''),
         models: model ? [{
           id: model.modelId || modelId,
-          name: model.name || 'Unknown Model',
-          provider: model.provider || 'Direct API',
+          name: model.name || modelId.split('/').pop() || modelId,
+          provider: model.provider || 'OpenRouter',
           usageCount: 0
         }] : []
       });
@@ -360,21 +373,18 @@ const sendChatMessage = async (req, res, next) => {
       return next(payErr);
     }
     
-    // Pre-check token availability (estimate based on max_tokens, model limits, or conservative default)
-    // Use a conservative default (200 tokens) to avoid rejecting requests unnecessarily.
-    // If model provides maxTokens or caller provided max_tokens, use those but cap to a sane upper bound.
-    const MODEL_TOKEN_CAP = 2000;
-    const estimatedTokenUsage = options.max_tokens
-      ? Number(options.max_tokens)
-      : (model && model.maxTokens ? Math.min(model.maxTokens, MODEL_TOKEN_CAP) : 200);
+    // Pre-check token availability using a reasonable estimate
+    // We use the requested max_tokens (or default 1000) as an upper-bound estimate.
+    // Actual deduction happens after the AI response based on real usage.
+    const estimatedTokenUsage = Number(options.max_tokens) || 1000;
     if (user.tokens.balance < estimatedTokenUsage) {
-      // Attach the latest user snapshot to req.user so the error handler can include balances in the response
-      try {
-        req.user = user;
-      } catch (e) {
-        // ignore
+      // Allow the request if the user has *some* tokens — we'll deduct actual usage later
+      // Only block if balance is truly zero
+      if (user.tokens.balance <= 0) {
+        try { req.user = user; } catch (e) { /* ignore */ }
+        return next(new AppError(`Insufficient tokens. You have ${user.tokens.balance} tokens available. Please add more tokens to continue.`, 402));
       }
-      return next(new AppError(`Insufficient tokens. This request may use up to ${estimatedTokenUsage} tokens, but you only have ${user.tokens.balance} tokens available.`, 402));
+      console.log(`⚠️ User has ${user.tokens.balance} tokens, estimated usage: ${estimatedTokenUsage} — allowing request, will deduct actual usage`);
     }
     
     console.log(`💰 Pre-check passed: User has ${user.tokens.balance} tokens, estimated usage: ${estimatedTokenUsage}`);
@@ -382,29 +392,59 @@ const sendChatMessage = async (req, res, next) => {
     // Note: Final token deduction happens after AI response based on actual usage
 
     // Create user message with proper messageId and ensure chronological order
-    const userMessageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    console.log(`💬 Creating user message with sessionId: ${session.sessionId} for session _id: ${session._id}`);
+    // Check if we can reuse an existing user message from a concurrent request (deduplication)
+    const currentLock = chatLocks.get(userId.toString());
     
-    // Add a small delay to ensure createdAt timestamps are properly ordered
-    // This prevents issues when multiple requests come in rapid succession
-    await new Promise(resolve => setTimeout(resolve, 10));
+    // DEBUG LOG
+    const fs = require('fs');
+    try {
+      fs.appendFileSync('debug_chat.log', `[${new Date().toISOString()}] LOCK CHECK: LockExists=${!!currentLock}, LockMsg=${currentLock?.message?.substring(0,10)}, CurMsg=${message.substring(0,10)}, LockSess=${currentLock?.sessionId}, CurSess=${session.sessionId}\n`);
+    } catch(e) {}
     
-    const userMessage = await ChatMessage.create({
-      sessionId: session.sessionId, // Use session.sessionId instead of session._id
-      userId,
-      messageId: userMessageId,
-      role: 'user',
-      content: message,
-      model: {
-        id: modelId,
-        name: model ? model.name : 'Unknown Model',
-        provider: model ? model.provider : 'Direct API'
-      },
-      metadata: {
-        userAgent: req.headers['user-agent'],
-        ipAddress: req.ip || req.connection.remoteAddress
+    // We strictly check for same message AND same session ID to avoid collisions
+    // Note: sessionId might differ if concurrent requests trigger new session creation, 
+    // but typically multi-model generation shares the same sessionId context.
+    if (currentLock && 
+        currentLock.userMessagePromise && 
+        currentLock.message === message.trim() &&
+        (!currentLock.sessionId || currentLock.sessionId === session.sessionId)) {
+      console.log('🔄 Reusing existing user message due to concurrent request');
+      try { require('fs').appendFileSync('debug_chat.log', `[${new Date().toISOString()}] ACTION: REUSED\n`); } catch(e){}
+      userMessage = await currentLock.userMessagePromise;
+    } else {
+      const userMessagePromise = (async () => {
+        const userMessageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        console.log(`💬 Creating user message with sessionId: ${session.sessionId} for session _id: ${session._id}`);
+        try { require('fs').appendFileSync('debug_chat.log', `[${new Date().toISOString()}] ACTION: CREATING NEW for Session ${session.sessionId}\n`); } catch(e){}
+        
+        // Add a small delay for timestamp ordering
+        await new Promise(resolve => setTimeout(resolve, 10));
+        
+        return await ChatMessage.create({
+          sessionId: session.sessionId, // Use session.sessionId instead of session._id
+          userId,
+          messageId: userMessageId,
+          role: 'user',
+          content: message,
+          model: {
+            id: modelId,
+            name: model ? model.name : (modelId.split('/').pop() || modelId),
+            provider: model ? model.provider : 'OpenRouter'
+          },
+          metadata: {
+            userAgent: req.headers['user-agent'],
+            ipAddress: req.ip || req.connection.remoteAddress
+          }
+        });
+      })();
+
+      if (currentLock) {
+        currentLock.userMessagePromise = userMessagePromise;
+        currentLock.sessionId = session.sessionId;
       }
-    });
+      
+      userMessage = await userMessagePromise;
+    }
 
     // Get conversation history for context (excluding the just-created user message to avoid duplicates)
     const conversationHistory = await ChatMessage.find({ 
@@ -590,18 +630,47 @@ const sendChatMessage = async (req, res, next) => {
       return next(providerErr);
     }
 
-    // Use your internal fixed token system instead of OpenRouter's actual token usage
-    // This fixes the issue where 800+ tokens were being deducted for simple "hi" responses
-    const internalTokenCost = modelType === 'free' ? 1 : 10;
-    const actualTokensUsed = internalTokenCost; // Track the actual tokens used for this request
+    // Calculate estimated tokens based on character count (conservative ~4 chars/token)
+    // This acts as a sanity check against under-reporting providers
+    const promptLen = message ? message.length : 0;
+    const completionLen = aiResponse ? aiResponse.length : 0;
+    const estimatedTokens = Math.ceil((promptLen + completionLen) / 4);
+    
+    // Get reported tokens from provider
+    const reportedTokens = usage.totalTokens || 0;
+    
+    // Use the GREATER of the two values to ensure fair deduction
+    // This handles 0, 1, or significantly undercounted tokens
+    let finalTokens = Math.max(reportedTokens, estimatedTokens);
+    
+    // Safety floor
+    if (finalTokens < 1) finalTokens = 1;
+
+    console.log(`🔍 Token Usage Audit:
+      - Reported by Provider: ${reportedTokens}
+      - Estimated (chars/4): ${estimatedTokens}
+      - FINAL DEDUCTION: ${finalTokens} tokens`);
+      
+    // Update usage object for consistency if estimation won or reporting was missing
+    if (finalTokens > reportedTokens) {
+       usage.totalTokens = finalTokens;
+       // If reported tokens were missing/low, fill in the breakdown
+       if (reportedTokens <= 1) {
+           usage.promptTokens = Math.ceil(promptLen / 4);
+           usage.completionTokens = Math.ceil(completionLen / 4);
+       }
+    }
+
+    const actualTokensUsed = finalTokens;
     
     console.log(`🔍 Token Usage Debug:
-      - OpenRouter reported tokens: ${usage.totalTokens}
-      - Internal token cost (fixed): ${internalTokenCost}
+      - Reported tokens: ${usage.totalTokens}
+      - Actual tokens to deduct: ${actualTokensUsed}
       - Model type: ${modelType}
-      - Using internal cost for deduction`);
+      - Prompt tokens: ${usage.promptTokens}
+      - Completion tokens: ${usage.completionTokens}`);
     
-    // Check if user has enough tokens for internal cost with retry logic for database conflicts
+    // Deduct REAL token usage with retry logic for database conflicts
     let currentUser;
     let retryCount = 0;
     const maxRetries = 3;
@@ -610,23 +679,21 @@ const sendChatMessage = async (req, res, next) => {
       try {
         currentUser = await require('../models/User').findById(userId);
         
-        if (currentUser.tokens.balance < internalTokenCost) {
-          // Still save the AI response but warn about token shortage
-          console.warn(`⚠️ Token shortage: Request needs ${internalTokenCost} tokens, user has ${currentUser.tokens.balance} tokens`);
+        if (currentUser.tokens.balance < actualTokensUsed) {
+          // User doesn't have enough tokens for full cost — deduct what they have
+          console.warn(`⚠️ Token shortage: Request used ${actualTokensUsed} tokens, user has ${currentUser.tokens.balance} tokens`);
           
-          // Deduct whatever tokens they have left and set balance to 0
           if (currentUser.tokens.balance > 0) {
             const remainingToDeduct = currentUser.tokens.balance;
             const res = await currentUser.deductTokens(remainingToDeduct, modelType);
             console.log(`💰 Deducted remaining ${res.deducted || remainingToDeduct} tokens from user ${userId}. Balance now: ${res.balance}`);
           }
           
-          // Continue with response but include warning
           console.log(`⚠️ User ${userId} has insufficient tokens but response will be delivered`);
         } else {
-          // Deduct the internal fixed token cost (corrected logic)
-          const res = await currentUser.deductTokens(internalTokenCost, modelType);
-          console.log(`💰 Deducted ${res.deducted || internalTokenCost} internal tokens from user ${userId}. Remaining: ${res.balance}`);
+          // Deduct the actual token usage from the AI response
+          const res = await currentUser.deductTokens(actualTokensUsed, modelType);
+          console.log(`💰 Deducted ${res.deducted || actualTokensUsed} real tokens from user ${userId}. Remaining: ${res.balance}`);
         }
         break; // Success, exit retry loop
         
@@ -636,12 +703,9 @@ const sendChatMessage = async (req, res, next) => {
         
         if (retryCount >= maxRetries) {
           console.error(`❌ Failed to deduct tokens after ${maxRetries} attempts, continuing without deduction`);
-          // Continue with the response even if token deduction failed
-          // This ensures the user still gets their AI response
           break;
         }
         
-        // Wait a bit before retrying to avoid rapid retries
         await new Promise(resolve => setTimeout(resolve, 100 * retryCount));
       }
     }
@@ -672,15 +736,15 @@ const sendChatMessage = async (req, res, next) => {
       content: aiResponse,
       model: {
         id: finalModelId || modelId,
-        name: model ? model.name : 'Unknown Model',
-        provider: model ? model.provider : 'Direct API'
+        name: model ? model.name : ((finalModelId || modelId).split('/').pop() || finalModelId || modelId),
+        provider: model ? model.provider : 'OpenRouter'
       },
       usage: {
         inputTokens: usage.promptTokens,
         outputTokens: usage.completionTokens,
         totalTokens: usage.totalTokens
       },
-      tokensDeducted: internalTokenCost, // Store internal fixed tokens deducted (1 for free, 10 for paid)
+      tokensDeducted: actualTokensUsed, // Store actual tokens deducted based on real AI usage
       modelType: modelType, // Store model type for analytics
       responseTime: Date.now() - startTime,
       status: 'completed',
@@ -725,14 +789,8 @@ const sendChatMessage = async (req, res, next) => {
       // Don't fail the request if stats update fails
     }
 
-    // Deduct tokens after successful AI response
-    try {
-      const deductResult = await req.user.deductTokens(1);
-      console.log(`User ${req.user._id} tokens deducted. Remaining: ${deductResult.balance}`);
-    } catch (creditsError) {
-      console.error('Credits deduction error:', creditsError.message);
-      // Don't fail the request if credits deduction fails (edge case)
-    }
+    // NOTE: Token deduction already happened above using actualTokensUsed
+    // No duplicate deduction needed here
 
     // Update model usage stats (guarded - model or metadata may be null for direct API calls)
     try {
@@ -790,12 +848,43 @@ const sendChatMessage = async (req, res, next) => {
       userId: req.user?._id,
       timestamp: new Date().toISOString()
     });
-    next(error);
-  } finally {
+
+    // Persist failed response to DB so it doesn't disappear on reload
+    // Only attempt if we have a session and user message to attach to
+    if (session && userMessage && userMessage._id) {
+       try {
+         await ChatMessage.create({
+           sessionId: session.sessionId,
+           userId,
+           messageId: `msg_${Date.now()}_failed`,
+           role: 'assistant',
+           content: error.message || "Failed to generate response",
+           model: {
+              id: modelId,
+              name: model ? model.name : (modelId.split('/').pop() || modelId),
+              provider: model ? model.provider : 'OpenRouter'
+           },
+           status: 'failed',
+           error: {
+             message: error.message,
+             code: error.code || 'GENERATION_FAILED'
+           },
+           metadata: {
+             error: error.message
+           }
+         });
+         console.log('💾 Saved failed response to DB');
+       } catch (persistError) {
+         console.error('Failed to persist error state:', persistError);
+       }
+    }
+
     // Always release the lock, even if there was an error
     if (userId && message) {
       releaseChatLock(userId, message);
     }
+    
+    next(error);
   }
 };
 
