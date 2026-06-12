@@ -18,6 +18,8 @@ const userSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   },
+  resetPasswordToken: String,
+  resetPasswordExpire: Date,
   name: {
     type: String,
     required: true,
@@ -27,6 +29,11 @@ const userSchema = new mongoose.Schema({
   avatar: {
     type: String,
     default: null
+  },
+  bio: {
+    type: String,
+    trim: true,
+    maxlength: 500
   },
   authProvider: {
     type: String,
@@ -51,10 +58,24 @@ const userSchema = new mongoose.Schema({
     defaultModels: [{
       type: String
     }],
+    favoriteModels: [{
+      type: String
+    }],
     language: {
       type: String,
       default: 'en'
     }
+  },
+  apiKeys: [{
+    key: String,
+    name: String,
+    createdAt: { type: Date, default: Date.now },
+    lastUsedAt: Date
+  }],
+  usageLimits: {
+    dailyRequests: { type: Number, default: 50 },
+    monthlyRequests: { type: Number, default: 1000 },
+    monthlyTokens: { type: Number, default: 100000 }
   },
   usage: {
     totalRequests: {
@@ -317,7 +338,12 @@ userSchema.methods.deductTokens = async function(amount, modelType = 'free', opt
           console.warn(`⚠️ Version conflict during token deduction (attempt ${saveAttempts}/${maxSaveAttempts}), retrying...`);
           
           // Reload the document and retry with fresh data
-          await this.reload();
+          const freshData = await this.model('User').findById(this._id);
+          if (freshData) {
+            this.tokens = freshData.tokens;
+            this.credits = freshData.credits;
+            this.__v = freshData.__v;
+          }
           
           // Recalculate based on fresh data
           this.tokens.balance = Math.max(0, (this.tokens.freeTokens || 0) + (this.tokens.paidTokens || 0));
@@ -444,7 +470,22 @@ userSchema.pre('save', async function(next) {
   next();
 });
 
-// Instance method to check password
+// Generate password reset token
+userSchema.methods.createPasswordResetToken = function() {
+  const crypto = require('crypto');
+  const resetToken = crypto.randomBytes(32).toString('hex');
+
+  this.resetPasswordToken = crypto
+    .createHash('sha256')
+    .update(resetToken)
+    .digest('hex');
+
+  this.resetPasswordExpire = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+  return resetToken;
+};
+
+// Method to verify password
 userSchema.methods.correctPassword = async function(candidatePassword, userPassword) {
   return await bcrypt.compare(candidatePassword, userPassword);
 };

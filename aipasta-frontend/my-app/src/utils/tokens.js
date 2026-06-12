@@ -4,17 +4,38 @@
  */
 
 /**
+ * Get coarse token cost per model
+ * @param {Object} model - The model object
+ * @returns {number} - Token cost
+ */
+export const getModelTokenCost = (model) => {
+  if (!model) return 10; // unknown model -> conservative cost
+  const pricing = model.pricing || {};
+  const hasPricing =
+    typeof pricing.input !== "undefined" ||
+    typeof pricing.output !== "undefined" ||
+    typeof pricing.image !== "undefined";
+    
+  if (hasPricing) {
+    const input = typeof pricing.input === "number" ? pricing.input : 0;
+    const output = typeof pricing.output === "number" ? pricing.output : 0;
+    if (input === 0 && output === 0) return 1;
+    return 10;
+  }
+  
+  if (model.isPaid === true || model.paid === true) return 10;
+  if (model.free === true) return 1;
+  return 10;
+};
+
+/**
  * Calculate tokens needed for a set of models
  * @param {Array} models - Array of selected models
  * @returns {number} - Total tokens needed
  */
 export const calculateTokensNeeded = (models) => {
   if (!Array.isArray(models)) return 0;
-  
-  return models.reduce((total, model) => {
-    const isPaidModel = model.pricing && (model.pricing.input > 0 || model.pricing.output > 0);
-    return total + (isPaidModel ? 10 : 1);
-  }, 0);
+  return models.reduce((total, model) => total + getModelTokenCost(model), 0);
 };
 
 /**

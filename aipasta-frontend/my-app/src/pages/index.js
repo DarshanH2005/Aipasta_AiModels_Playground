@@ -14,14 +14,8 @@ export default function Home() {
               <Link href="/chat" className="text-gray-600 hover:text-purple-600 px-3 py-2 rounded-md text-sm font-medium">
                 Chat
               </Link>
-              <Link href="/models" className="text-gray-600 hover:text-purple-600 px-3 py-2 rounded-md text-sm font-medium">
-                Models
-              </Link>
-              <Link href="/dashboard" className="text-gray-600 hover:text-purple-600 px-3 py-2 rounded-md text-sm font-medium">
-                Dashboard
-              </Link>
-              <Link href="/auth/signin" className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md text-sm font-medium">
-                Sign In
+              <Link href="/chat" className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                Try Now
               </Link>
             </nav>
           </div>
@@ -38,10 +32,10 @@ export default function Home() {
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <Link href="/models" className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-4 rounded-full text-lg font-semibold">
-              Explore Models
+            <Link href="/chat" className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-4 rounded-full text-lg font-semibold">
+              Start Chatting
             </Link>
-            <Link href="/playground" className="border-2 border-purple-600 text-purple-600 hover:bg-purple-600 hover:text-white px-8 py-4 rounded-full text-lg font-semibold">
+            <Link href="/chat" className="border-2 border-purple-600 text-purple-600 hover:bg-purple-600 hover:text-white px-8 py-4 rounded-full text-lg font-semibold">
               Try Playground
             </Link>
           </div>

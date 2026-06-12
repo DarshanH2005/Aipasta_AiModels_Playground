@@ -11,7 +11,7 @@ const router = express.Router();
 
 // Initialize AI services
 console.log('🔑 OpenRouter API Key configured:', process.env.OPENROUTER_API_KEY ? 'YES' : 'NO');
-console.log('🔑 Actual API Key (first 15 chars):', process.env.OPENROUTER_API_KEY ? process.env.OPENROUTER_API_KEY.substring(0, 15) + '...' : 'MISSING');
+
 const openRouterService = new OpenRouterService(process.env.OPENROUTER_API_KEY);
 const huggingFaceService = new HuggingFaceService(process.env.HUGGINGFACE_API_KEY);
 
@@ -220,7 +220,7 @@ const sendChatMessage = async (req, res, next) => {
       sessionId: req.body.sessionId, 
       message: req.body.message?.substring(0,20) 
   })}\n`;
-  try { fs.appendFileSync('debug_chat.log', logLine); } catch (e) {}
+
 
   // Declare variables outside try/catch for access in catch block & deduplication
   let session = null;
@@ -398,7 +398,7 @@ const sendChatMessage = async (req, res, next) => {
     // DEBUG LOG
     const fs = require('fs');
     try {
-      fs.appendFileSync('debug_chat.log', `[${new Date().toISOString()}] LOCK CHECK: LockExists=${!!currentLock}, LockMsg=${currentLock?.message?.substring(0,10)}, CurMsg=${message.substring(0,10)}, LockSess=${currentLock?.sessionId}, CurSess=${session.sessionId}\n`);
+
     } catch(e) {}
     
     // We strictly check for same message AND same session ID to avoid collisions

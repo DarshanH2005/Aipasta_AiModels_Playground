@@ -159,7 +159,7 @@ const handleRazorpayWebhook = async (req, res) => {
     // Parse payload
     let payload;
     try {
-      const bodyString = Buffer.isBuffer(body) ? body.toString('utf8') : body;
+      const bodyString = Buffer.isBuffer(bodyToVerify) ? bodyToVerify.toString('utf8') : bodyToVerify;
       payload = JSON.parse(bodyString);
     } catch (e) {
       console.error('Webhook: Failed to parse JSON body', e);

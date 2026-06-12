@@ -24,7 +24,31 @@ const { authenticateToken, optionalAuth } = require('./middleware/auth');
 const app = express();
 
 // Trust proxy for Render deployment
-app.set('trust proxy', true);
+app.set('trust proxy', 1); // Limit to 1 proxy hop
+
+// ... other code ...
+
+// Temporary IP check endpoint for MongoDB whitelist (DISABLED FOR SECURITY)
+// app.get('/api/check-ip', async (req, res) => {
+//   try {
+//     const fetch = require('node-fetch');
+//     const response = await fetch('https://api.ipify.org?format=json');
+//     const data = await response.json();
+//     console.log('🌐 Render Server IP:', data.ip);
+//     res.json({
+//       message: 'Add this IP to MongoDB Atlas whitelist',
+//       serverIP: data.ip,
+//       instructions: 'Go to MongoDB Atlas → Security → Network Access → Add IP Address'
+//     });
+//   } catch (error) {
+//     console.error('❌ Error getting IP:', error);
+//     res.json({
+//       message: 'Could not fetch IP',
+//       error: error.message,
+//       fallback: 'Use 0.0.0.0/0 to allow all IPs temporarily'
+//     });
+//   }
+// });
 
 // Security middleware
 const cspSources = process.env.HELMET_CSP_SOURCES 
@@ -155,27 +179,27 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Temporary IP check endpoint for MongoDB whitelist
-app.get('/api/check-ip', async (req, res) => {
-  try {
-    const fetch = require('node-fetch');
-    const response = await fetch('https://api.ipify.org?format=json');
-    const data = await response.json();
-    console.log('🌐 Render Server IP:', data.ip);
-    res.json({
-      message: 'Add this IP to MongoDB Atlas whitelist',
-      serverIP: data.ip,
-      instructions: 'Go to MongoDB Atlas → Security → Network Access → Add IP Address'
-    });
-  } catch (error) {
-    console.error('❌ Error getting IP:', error);
-    res.json({
-      message: 'Could not fetch IP',
-      error: error.message,
-      fallback: 'Use 0.0.0.0/0 to allow all IPs temporarily'
-    });
-  }
-});
+// Temporary IP check endpoint for MongoDB whitelist (DISABLED FOR SECURITY)
+// app.get('/api/check-ip', async (req, res) => {
+//   try {
+//     const fetch = require('node-fetch');
+//     const response = await fetch('https://api.ipify.org?format=json');
+//     const data = await response.json();
+//     console.log('🌐 Render Server IP:', data.ip);
+//     res.json({
+//       message: 'Add this IP to MongoDB Atlas whitelist',
+//       serverIP: data.ip,
+//       instructions: 'Go to MongoDB Atlas → Security → Network Access → Add IP Address'
+//     });
+//   } catch (error) {
+//     console.error('❌ Error getting IP:', error);
+//     res.json({
+//       message: 'Could not fetch IP',
+//       error: error.message,
+//       fallback: 'Use 0.0.0.0/0 to allow all IPs temporarily'
+//     });
+//   }
+// });
 
 // API Routes
 app.use('/api/auth', authLimiter, authRoutes);

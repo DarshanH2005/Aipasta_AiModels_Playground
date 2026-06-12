@@ -24,8 +24,6 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }) => {
   
  
 
-  if (!isOpen) return null;
-
   const handleInputChange = (e) => {
     setFormData({
       ...formData,
@@ -379,6 +377,7 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'login' }) => {
       username: ''
     });
   };
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black/20 backdrop-blur-md flex items-center justify-center z-50 p-4">

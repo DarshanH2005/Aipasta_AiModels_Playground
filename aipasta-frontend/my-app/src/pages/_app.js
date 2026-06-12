@@ -1,6 +1,5 @@
 import "@/styles/globals.css";
 import AuthProvider from '../contexts/AuthContext';
-// import ThemeProvider from '../contexts/ThemeContext';
 import { ToastProvider, ErrorBoundary } from '../shared';
 
 export default function App({ Component, pageProps }) {
@@ -64,13 +63,11 @@ export default function App({ Component, pageProps }) {
   }
   return (
     <ErrorBoundary>
-      {/* <ThemeProvider> */}
-        <AuthProvider>
-          <ToastProvider>
-            <Component {...pageProps} />
-          </ToastProvider>
-        </AuthProvider>
-      {/* </ThemeProvider> */}
+      <AuthProvider>
+        <ToastProvider>
+          <Component {...pageProps} />
+        </ToastProvider>
+      </AuthProvider>
     </ErrorBoundary>
   );
 }

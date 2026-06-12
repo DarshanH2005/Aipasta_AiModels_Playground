@@ -21,7 +21,7 @@ class OpenRouterService {
     };
     
     console.log('✅ OpenRouter Service initialized with API key:', apiKey.substring(0, 10) + '...');
-    console.log('🔐 Authorization header:', this.headers.Authorization.substring(0, 20) + '...');
+
   }
 
   async getModels() {
@@ -151,8 +151,8 @@ class OpenRouterService {
       });
 
       console.log('🔍 Full request body preview:', JSON.stringify(requestBody, null, 2));
-      console.log('🔍 Authorization header check:', this.headers.Authorization ? 'Present' : 'Missing');
-      console.log('🔍 Full Authorization header:', this.headers.Authorization);
+
+
       
       const response = await fetch(`${this.baseURL}/chat/completions`, {
         method: 'POST',
